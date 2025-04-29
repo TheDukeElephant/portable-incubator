@@ -5,7 +5,7 @@ import threading
 import atexit
 import io
 from flask import render_template, request, jsonify, Response, make_response
-from . import app, sock
+from . import sock # app is implicitly available via current_app in routes
 from .control.manager import ControlManager
 
 # --- Global Control Manager Instance ---
