@@ -195,3 +195,48 @@ h1 {
     border-radius: 4px;
     border: 1px solid var(--danger-color);
 }
+/* --- Log Download Section --- */
+.log-download-section {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex; /* Use flexbox for alignment */
+    align-items: center; /* Vertically align items */
+    gap: 15px; /* Space between elements */
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.log-download-section label {
+    font-weight: 500;
+    color: var(--text-muted-color);
+}
+
+.duration-select {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.log-button {
+    padding: 9px 18px; /* Slightly larger padding */
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--primary-accent);
+    color: var(--bg-color); /* Dark text on light button */
+    font-family: var(--font-family);
+    font-weight: 500;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+}
+
+.log-button:hover {
+    background-color: #3abfa0; /* Darker teal on hover */
+}
