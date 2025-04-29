@@ -169,7 +169,19 @@ class DataLogger:
         writer = csv.writer(output)
 
         writer.writerow(headers)
-        writer.writerows(rows)
+        # Convert timestamp and write rows
+        for row in rows:
+            # Convert Unix timestamp (first element) to ISO 8601 string
+            try:
+                # Assuming row[0] is the timestamp
+                dt_object = datetime.datetime.fromtimestamp(row[0], tz=datetime.timezone.utc)
+                formatted_timestamp = dt_object.isoformat()
+            except (TypeError, ValueError):
+                formatted_timestamp = "Invalid Timestamp" # Handle potential errors
+
+            # Create a new list/tuple with the formatted timestamp
+            formatted_row = [formatted_timestamp] + list(row[1:])
+            writer.writerow(formatted_row)
 
         return output.getvalue()
 

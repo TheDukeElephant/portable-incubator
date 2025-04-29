@@ -239,3 +239,13 @@ function updateSetpoints() {
 // --- Initial Connection & Chart Setup ---
 initCharts(); // Initialize charts on page load
 connectWebSocket();
+// --- Log Download Function ---
+function downloadLogWithDuration() {
+    const durationSelect = document.getElementById('log-duration-select');
+    const selectedDuration = durationSelect.value;
+    const downloadUrl = `/download_log?duration=${selectedDuration}`;
+
+    console.log(`Requesting log download with URL: ${downloadUrl}`);
+    // Open the URL in a new tab, which will trigger the download
+    window.open(downloadUrl, '_blank');
+}

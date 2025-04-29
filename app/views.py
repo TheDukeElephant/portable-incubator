@@ -117,13 +117,39 @@ def setpoints():
 
 @main_bp.route("/download_log")
 def download_log():
-    """Downloads the logged data as a CSV file."""
+    """Downloads the logged data as a CSV file, optionally filtered by duration."""
     global _async_loop
     if not _async_loop or not _async_loop.is_running():
          return "Error: Background processing loop not running.", 500
 
+    # --- Time Range Handling ---
+    duration_str = request.args.get('duration', 'all') # Default to 'all' if not provided
+    DURATION_MAP = {
+        "1h": 3600,
+        "6h": 6 * 3600,
+        "24h": 24 * 3600,
+        "7d": 7 * 24 * 3600,
+        "30d": 30 * 24 * 3600,
+        "all": None
+    }
+    duration_seconds = DURATION_MAP.get(duration_str)
+
+    start_time = None
+    end_time = time.time() # End time is always now
+
+    if duration_seconds is not None:
+        start_time = end_time - duration_seconds
+    elif duration_str != 'all':
+        # Handle invalid duration string if needed, maybe default to 'all' or return error
+        print(f"Warning: Invalid duration '{duration_str}' received. Defaulting to 'all'.")
+        duration_str = 'all' # Reset to all if invalid
+
+    print(f"Requesting log download for duration: {duration_str} (Start: {start_time}, End: {end_time})")
+    # --- End Time Range Handling ---
+
     # Need to run the async get_data_as_csv in the background loop thread
-    future = asyncio.run_coroutine_threadsafe(manager.logger.get_data_as_csv(), _async_loop)
+    # Pass start_time and end_time (end_time is currently always now, so passing None might be okay if logger handles it)
+    future = asyncio.run_coroutine_threadsafe(manager.logger.get_data_as_csv(start_time=start_time, end_time=None), _async_loop)
     try:
         csv_data = future.result(timeout=10) # Wait for the result
     except Exception as e:
