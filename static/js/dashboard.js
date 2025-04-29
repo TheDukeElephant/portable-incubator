@@ -94,22 +94,22 @@ function initCharts() {
 
     tempChart = new Chart(document.getElementById('temp-chart').getContext('2d'), {
         type: 'line',
-        data: { labels: chartData.temperature.labels, datasets: [{ data: chartData.temperature.values, borderColor: 'rgb(255, 99, 132)', tension: 0.1, pointRadius: 0 }] },
+        data: { labels: chartData.temperature.labels, datasets: [{ data: chartData.temperature.values, borderColor: '#FFA500', tension: 0.1, pointRadius: 0 }] },
         options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: '°C' } } } }
     });
     humChart = new Chart(document.getElementById('hum-chart').getContext('2d'), {
         type: 'line',
-        data: { labels: chartData.humidity.labels, datasets: [{ data: chartData.humidity.values, borderColor: 'rgb(54, 162, 235)', tension: 0.1, pointRadius: 0 }] },
+        data: { labels: chartData.humidity.labels, datasets: [{ data: chartData.humidity.values, borderColor: '#3a86ff', tension: 0.1, pointRadius: 0 }] },
         options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: '%' } } } }
     });
     o2Chart = new Chart(document.getElementById('o2-chart').getContext('2d'), {
         type: 'line',
-        data: { labels: chartData.o2.labels, datasets: [{ data: chartData.o2.values, borderColor: 'rgb(75, 192, 192)', tension: 0.1, pointRadius: 0 }] },
+        data: { labels: chartData.o2.labels, datasets: [{ data: chartData.o2.values, borderColor: '#4ecca3', tension: 0.1, pointRadius: 0 }] },
         options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: '%' } } } }
     });
     co2Chart = new Chart(document.getElementById('co2-chart').getContext('2d'), {
         type: 'line',
-        data: { labels: chartData.co2.labels, datasets: [{ data: chartData.co2.values, borderColor: 'rgb(153, 102, 255)', tension: 0.1, pointRadius: 0 }] },
+        data: { labels: chartData.co2.labels, datasets: [{ data: chartData.co2.values, borderColor: '#C77DFF', tension: 0.1, pointRadius: 0 }] },
         options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: 'ppm' } } } }
     });
 }

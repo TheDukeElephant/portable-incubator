@@ -1,17 +1,197 @@
-body { font-family: sans-serif; line-height: 1.5; padding: 20px; }
-.container { max-width: 600px; margin: auto; }
-.status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; } /* Changed for 2x2 grid */
-.status-item { border: 1px solid #ccc; padding: 15px; border-radius: 5px; background-color: #f9f9f9; }
-.status-item h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-.value { font-size: 1.4em; font-weight: bold; }
-.unit { font-size: 0.9em; color: #555; }
-.setpoint-section { margin-top: 10px; }
-.setpoint-input { width: 70px; padding: 5px; margin-right: 5px; }
-.setpoint-button { padding: 5px 10px; cursor: pointer; }
-.relay-status { margin-top: 8px; font-size: 0.9em; padding: 3px 6px; border-radius: 3px; display: inline-block; }
-.relay-on { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-.relay-off { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-.error-message { color: red; font-weight: bold; margin-top: 10px; }
-.log-link { display: block; margin-top: 20px; }
-#ws-status { margin-top: 15px; font-style: italic; color: #666; }
-.chart-container { position: relative; height:150px; width:100%; margin-top: 15px; } /* Added for chart */
+/* --- Global Styles & Variables --- */
+:root {
+    --bg-color: #1a1a2e; /* Dark blue background */
+    --card-bg-color: #2a2a4e; /* Slightly lighter card background */
+    --text-color: #e0e0e0; /* Light text for contrast */
+    --text-muted-color: #a0a0c0; /* Muted text */
+    --primary-accent: #4ecca3; /* Teal accent */
+    --secondary-accent: #3a86ff; /* Blue accent */
+    --danger-color: #ff6b6b; /* Red for errors/off status */
+    --success-color: #6bffb8; /* Lighter green for on status */
+    --border-color: #404060;
+    --font-family: 'Inter', sans-serif;
+}
+
+body {
+    font-family: var(--font-family);
+    line-height: 1.6;
+    padding: 30px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+}
+
+.container {
+    max-width: 1200px; /* Wider container for dashboard */
+    margin: auto;
+}
+
+h1 {
+    color: var(--primary-accent);
+    text-align: center;
+    margin-bottom: 30px;
+    font-weight: 700;
+}
+
+/* --- Status Grid --- */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Responsive grid */
+    gap: 25px;
+    margin-bottom: 30px;
+}
+
+.status-item {
+    border: 1px solid var(--border-color);
+    padding: 20px;
+    border-radius: 8px;
+    background-color: var(--card-bg-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease-in-out;
+}
+
+.status-item:hover {
+    transform: translateY(-3px);
+}
+
+.status-item h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    color: var(--primary-accent);
+    font-weight: 500;
+    font-size: 1.1em;
+}
+
+/* --- Value Display --- */
+.value {
+    font-size: 2em; /* Larger value */
+    font-weight: 700;
+    color: var(--text-color);
+    display: block; /* Ensure it takes full width */
+    margin-bottom: 5px;
+}
+
+.unit {
+    font-size: 0.9em;
+    color: var(--text-muted-color);
+    margin-left: 5px;
+}
+
+/* --- Setpoint Section --- */
+.setpoint-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.95em;
+    color: var(--text-muted-color);
+}
+
+.setpoint-section br {
+    margin-bottom: 5px; /* Space after line break */
+}
+
+.setpoint-section span { /* Target display */
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.setpoint-input {
+    width: 80px;
+    padding: 8px 10px;
+    margin-right: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    font-size: 0.9em;
+}
+
+.setpoint-button {
+    padding: 8px 15px;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--secondary-accent);
+    color: #fff;
+    font-family: var(--font-family);
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+}
+
+.setpoint-button:hover {
+    background-color: #2a70e0; /* Darker blue on hover */
+}
+
+/* --- Relay Status --- */
+.relay-status {
+    margin-top: 12px;
+    font-size: 0.9em;
+    padding: 5px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    font-weight: 500;
+    border: 1px solid transparent;
+}
+
+.relay-on {
+    background-color: rgba(107, 255, 184, 0.1); /* Transparent green */
+    color: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.relay-off {
+    background-color: rgba(255, 107, 107, 0.1); /* Transparent red */
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+}
+
+/* --- Chart & Links --- */
+.chart-container {
+    position: relative;
+    height: 180px; /* Slightly taller chart */
+    width: 100%;
+    margin-top: 20px;
+    background-color: rgba(0,0,0,0.1); /* Subtle background for chart area */
+    border-radius: 4px;
+    padding: 5px;
+}
+
+.log-link {
+    display: inline-block; /* Changed from block */
+    margin-top: 30px;
+    padding: 10px 18px;
+    background-color: var(--primary-accent);
+    color: var(--bg-color);
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+}
+
+.log-link:hover {
+    background-color: #3abfa0; /* Darker teal */
+}
+
+/* --- Status/Error Messages --- */
+#ws-status {
+    margin-top: 0; /* Reset margin */
+    margin-bottom: 15px; /* Add margin below */
+    font-style: italic;
+    color: var(--text-muted-color);
+    text-align: center;
+    font-size: 0.9em;
+}
+
+.error-message {
+    color: var(--danger-color);
+    font-weight: 500; /* Bolder error */
+    margin-top: 10px;
+    text-align: center;
+    background-color: rgba(255, 107, 107, 0.1);
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid var(--danger-color);
+}
