@@ -3,6 +3,8 @@ from fastapi import FastAPI, WebSocket
 from .settings import settings
 from .control.temperature import TemperatureLoop
 from .db import init_db
+from pydantic import BaseModel
+
 
 app = FastAPI(title="Incubator Controller")
 loop = TemperatureLoop()
@@ -29,3 +31,31 @@ async def stream(ws: WebSocket):
                             "temp": loop.current,
                             "sp": loop.pid.setpoint})
         await asyncio.sleep(1)
+
+class SetpointUpdate(BaseModel):
+    temperature: float | None = None
+    humidity: float | None = None
+    co2: float | None = None
+    o2: float | None = None
+
+@app.get("/telemetry")
+def telemetry():
+    return {
+        "temperature": loop.current,
+        "humidity": 55.0,   # TODO real sensor
+        "co2": 3.1,
+        "o2": 19.5,
+        "setpoints": {
+            "temperature": loop.pid.setpoint,
+            "humidity": 60.0,
+            "co2": 5.0,
+            "o2": 5.0,
+        }
+    }
+
+@app.put("/setpoints")
+def update_setpoints(body: SetpointUpdate):
+    if body.temperature is not None:
+        loop.pid.setpoint = body.temperature
+    # ...same for others...
+    return {"ok": True}
