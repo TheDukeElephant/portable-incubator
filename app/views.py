@@ -125,11 +125,20 @@ def download_log():
     # --- Time Range Handling ---
     duration_str = request.args.get('duration', 'all') # Default to 'all' if not provided
     DURATION_MAP = {
+        "1m": 60,          # Added
+        "5m": 5 * 60,      # Added
+        "15m": 15 * 60,     # Added
+        "30m": 30 * 60,     # Added
         "1h": 3600,
         "6h": 6 * 3600,
         "24h": 24 * 3600,
+        "2d": 2 * 24 * 3600,    # Added
+        "5d": 5 * 24 * 3600,    # Added
+        "10d": 10 * 24 * 3600,   # Added
+        "20d": 20 * 24 * 3600,   # Added
         "7d": 7 * 24 * 3600,
         "30d": 30 * 24 * 3600,
+        "60d": 60 * 24 * 3600,   # Added
         "all": None
     }
     duration_seconds = DURATION_MAP.get(duration_str)
