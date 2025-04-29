@@ -4,3 +4,5 @@ flask-sock==0.7.0
 simple-pid==2.0.0
 aiosqlite==0.20.0
 gpiozero==2.0          # replaces RPi.GPIO
+adafruit-circuitpython-dht
+adafruit-blinka

@@ -4,9 +4,12 @@ import time
 import threading
 import atexit
 import io
-from flask import render_template, request, jsonify, Response, make_response
-from . import sock # app is implicitly available via current_app in routes
+from flask import Blueprint, render_template, request, jsonify, Response, make_response
+from . import sock # sock is initialized in __init__
 from .control.manager import ControlManager
+
+# Create a Blueprint
+main_bp = Blueprint('main', __name__)
 
 # --- Global Control Manager Instance ---
 manager = ControlManager() # Initialize the manager
@@ -78,18 +81,18 @@ atexit.register(stop_background_loop)
 
 
 # ------------- HTTP endpoints --------------------
-@app.route("/")
+@main_bp.route("/")
 def ui():
     """Serves the main dashboard UI."""
     return render_template("dashboard.html")
 
-@app.route("/status") # Renamed from /telemetry for clarity
+@main_bp.route("/status") # Renamed from /telemetry for clarity
 def status():
     """Returns the current status of the incubator."""
     current_status = manager.get_status()
     return jsonify(current_status)
 
-@app.route("/setpoints", methods=["PUT"])
+@main_bp.route("/setpoints", methods=["PUT"])
 def setpoints():
     """Updates the setpoints for control loops."""
     data = request.json
@@ -112,7 +115,7 @@ def setpoints():
     manager.update_setpoints(valid_setpoints)
     return jsonify({"ok": True, "updated_setpoints": valid_setpoints})
 
-@app.route("/download_log")
+@main_bp.route("/download_log")
 def download_log():
     """Downloads the logged data as a CSV file."""
     global _async_loop

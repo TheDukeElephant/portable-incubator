@@ -8,10 +8,11 @@ def create_app():
     app = Flask(__name__, template_folder='../templates', static_folder='../static')
     sock.init_app(app)
 
+    # Import and register Blueprints within the app context
     with app.app_context():
-        # Import parts of our application
-        from . import views  # noqa
+        from . import views
+        app.register_blueprint(views.main_bp)
 
-        # Register Blueprints or routes here if needed in the future
+        # Import other parts or register other blueprints if needed
 
     return app

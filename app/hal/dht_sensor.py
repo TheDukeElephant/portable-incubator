@@ -38,7 +38,7 @@ class DHT22Sensor:
 
         for attempt in range(retries):
             try:
-                humidity, temperature = Adafruit_DHT.read(self.sensor_type, self.pin)
+                humidity, temperature = adafruit_dht.read(self.sensor_type, self.pin)
 
                 # Check if reading was successful
                 if humidity is not None and temperature is not None:
