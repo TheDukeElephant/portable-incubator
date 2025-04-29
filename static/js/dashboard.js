@@ -23,6 +23,7 @@ function connectWebSocket() {
     socket.onopen = function(event) {
         console.log("WebSocket connection opened");
         wsStatusDiv.textContent = 'Connected';
+        errorDiv.textContent = ''; // Clear error message on successful connection
     };
 
     socket.onmessage = function(event) {
