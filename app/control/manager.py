@@ -59,6 +59,7 @@ class ControlManager:
         # 1. Initialize HAL Components
         print("  Initializing HAL components...")
         self.dht_sensor = DHT22Sensor(DHT_PIN)
+        self.dht_sensor.start_background_initialization() # Start non-blocking init
         self.o2_sensor = DFRobotO2Sensor(i2c_address=O2_SENSOR_ADDR)
         self.co2_sensor = CO2Sensor() # Initialize dummy CO2 sensor
 

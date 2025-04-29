@@ -2,6 +2,7 @@ import adafruit_dht
 import board
 import time
 import random
+import threading # Import threading
 
 # --- Configuration ---
 # Set to True to force dummy mode even if a real sensor library was added later
@@ -18,10 +19,11 @@ class DHT22Sensor:
     Reads Temperature and Humidity from a DHT22 sensor connected to a specific GPIO pin.
     Uses the adafruit-circuitpython-dht library.
     Includes dummy mode fallback for testing or if sensor fails initialization.
+    Initialization is deferred and performed in a background thread.
     """
     def __init__(self, pin: int):
         """
-        Initializes the DHT22 sensor reader.
+        Initializes the DHT22 sensor reader instance. Hardware initialization is deferred.
 
         Args:
             pin: The GPIO pin number (BCM numbering) the sensor's data line is connected to.
@@ -29,45 +31,73 @@ class DHT22Sensor:
         self.pin_number = pin
         self.is_dummy = False
         self.dht_device = None
+        self._initialization_lock = threading.Lock() # Lock for initialization
+        self._initialized = False # Flag to track initialization attempt
         self._last_temp = DUMMY_TEMP_CELSIUS # Initialize with dummy values
         self._last_humidity = DUMMY_HUMIDITY_PERCENT
 
         if FORCE_DUMMY_MODE:
+            # If forcing dummy, mark as initialized in dummy mode immediately
             self.is_dummy = True
+            self._initialized = True # Mark as initialized (in dummy mode)
             print(f"DHT22Sensor (GPIO {pin}) initialized in FORCED DUMMY MODE.")
             return
 
-        try:
-            # 1. Check board pin validity
+        # Initialization logic moved to _initialize_hardware()
+        # We don't want to block here anymore.
+        # The calling code should trigger initialization in a background thread.
+        print(f"DHT22Sensor (GPIO {pin}) instance created. Hardware initialization deferred.")
+
+    def _initialize_hardware(self):
+        """
+        Attempts to initialize the actual hardware sensor.
+        This method is intended to be called in a background thread.
+        Sets self.dht_device on success or self.is_dummy = True on failure.
+        """
+        with self._initialization_lock:
+            if self._initialized: # Prevent re-initialization attempt
+                return
+
+            print(f"Attempting DHT22 hardware initialization on GPIO {self.pin_number}...")
             try:
-                self.board_pin = getattr(board, f'D{pin}')
-            except AttributeError:
-                 raise ValueError(f"Invalid GPIO pin: D{pin} not found in board module.")
+                # 1. Check board pin validity
+                try:
+                    board_pin = getattr(board, f'D{self.pin_number}')
+                except AttributeError:
+                     raise ValueError(f"Invalid GPIO pin: D{self.pin_number} not found in board module.")
 
-            # 2. Attempt to initialize the actual sensor device
-            # use_pulseio=False might be needed on some platforms if RuntimeError occurs often
-            self.dht_device = SENSOR_TYPE(self.board_pin, use_pulseio=False)
-            # Perform an initial read attempt to confirm connectivity
-            self._read_sensor_internal()
-            print(f"DHT22Sensor initialized for GPIO {pin}. Initial read: Temp={self._last_temp}°C, Hum={self._last_humidity}%")
+                # 2. Attempt to initialize the actual sensor device
+                # use_pulseio=False might be needed on some platforms if RuntimeError occurs often
+                temp_device = SENSOR_TYPE(board_pin, use_pulseio=False)
 
-        except (ValueError, RuntimeError, NotImplementedError) as e:
-            print(f"Warning: Failed to initialize DHT22 sensor on GPIO {pin}: {e}. Falling back to DUMMY MODE.")
-            self.is_dummy = True
-            self.dht_device = None # Ensure device is None in dummy mode
-            # Keep dummy values in _last_temp/_last_humidity
-        except Exception as e:
-            # Catch any other unexpected errors during init
-            print(f"Warning: Unexpected error initializing DHT22 sensor on GPIO {pin}: {e}. Falling back to DUMMY MODE.")
-            self.is_dummy = True
-            self.dht_device = None
+                # 3. Perform an initial read attempt to confirm connectivity
+                # This might still block briefly, but less than the old init
+                # We need a temporary way to read without relying on the main read method structure yet
+                temp_device.temperature # Try reading temperature
+                temp_device.humidity    # Try reading humidity
+
+                # 4. Assign only after successful initial read
+                self.dht_device = temp_device
+                print(f"DHT22Sensor hardware initialized successfully for GPIO {self.pin_number}.")
+
+            except (ValueError, RuntimeError, NotImplementedError, AttributeError) as e: # Added AttributeError for getattr
+                print(f"Warning: Failed to initialize DHT22 sensor on GPIO {self.pin_number}: {e}. Falling back to DUMMY MODE.")
+                self.is_dummy = True
+                self.dht_device = None # Ensure device is None
+            except Exception as e:
+                # Catch any other unexpected errors during init
+                print(f"Warning: Unexpected error initializing DHT22 sensor on GPIO {self.pin_number}: {e}. Falling back to DUMMY MODE.")
+                self.is_dummy = True
+                self.dht_device = None # Ensure device is None
+            finally:
+                self._initialized = True # Mark initialization as attempted (success or failure)
 
     def read(self) -> tuple[float | None, float | None]:
         """
         Reads temperature and humidity.
-        Returns dummy values if in dummy mode.
-        If not in dummy mode, attempts to read the sensor with retries.
-        On failure, returns the last known good values or dummy values if none exist.
+        Returns dummy values if in dummy mode or if hardware init failed.
+        Returns last known values if hardware is not yet initialized or read fails.
+        Attempts to read the sensor with retries if hardware is initialized.
 
         Returns:
             A tuple containing (temperature_celsius, humidity_percent).
@@ -83,11 +113,18 @@ class DHT22Sensor:
             # print(f"DHT22 Read (Dummy): Temp={temp}°C, Hum={hum}%") # Optional debug
             return temp, hum
 
-        # --- Attempt real sensor read ---
+        # --- Check if hardware is ready ---
+        if not self.dht_device:
+            # If not dummy and device not initialized (or failed init), return last known/dummy values
+            # Don't even attempt _read_sensor_internal if device isn't ready
+            # print(f"DHT22 Read: Hardware not ready/initialized on GPIO {self.pin_number}. Returning last known values.") # Optional debug
+            return self._last_temp, self._last_humidity
+
+        # --- Attempt real sensor read (only if self.dht_device is valid) ---
         success = self._read_sensor_internal()
 
         if not success:
-             print(f"DHT22 Read Failed on GPIO {self.pin_number}. Returning last known/dummy values: Temp={self._last_temp}°C, Hum={self._last_humidity}%")
+             print(f"DHT22 Read Failed on GPIO {self.pin_number}. Returning last known values: Temp={self._last_temp}°C, Hum={self._last_humidity}%")
 
         # Return the latest values stored in _last_temp/_last_humidity
         # which are either the last successful read or the initial dummy values.
@@ -102,7 +139,9 @@ class DHT22Sensor:
         Returns:
             True if read was successful within retries, False otherwise.
         """
-        if not self.dht_device: # Should not happen if not in dummy mode, but check anyway
+        # This check is crucial. If called when device isn't ready, it should fail gracefully.
+        # The read() method should prevent calling this if dht_device is None.
+        if not self.dht_device:
              print("DHT22 Internal Read Error: Sensor device not available.")
              return False
 
@@ -163,27 +202,57 @@ class DHT22Sensor:
         # self.read()
         return self._last_humidity
 
+    def start_background_initialization(self):
+        """Starts the hardware initialization in a background thread."""
+        if not self._initialized and not self.is_dummy:
+            init_thread = threading.Thread(target=self._initialize_hardware, daemon=True)
+            init_thread.start()
+            print(f"DHT22 background initialization thread started for GPIO {self.pin_number}.")
+        elif self.is_dummy:
+            print(f"DHT22 (GPIO {self.pin_number}) is in dummy mode, skipping background initialization.")
+        else: # Already initialized or init started
+             pass # Or print a message indicating it's already handled
+
 # Example Usage (for testing purposes)
 if __name__ == '__main__':
     # Replace with the actual GPIO pin connected to the DHT22 data line
-    DHT_PIN = 4
+    DHT_PIN = 4 # Example pin
     print(f"Testing DHT22Sensor on GPIO {DHT_PIN}...")
 
     try:
+        # 1. Create the sensor instance (doesn't block)
         sensor = DHT22Sensor(DHT_PIN)
 
-        print("Attempting initial read...")
+        # 2. Start background initialization
+        sensor.start_background_initialization()
+
+        # 3. Simulate application doing other things while sensor initializes
+        print("Main thread continues while sensor initializes in background...")
+        time.sleep(1) # Give init thread a moment to start
+
+        print("\nAttempting initial read (might return dummy/last values if init not complete)...")
         temp, hum = sensor.read()
         if temp is not None and hum is not None:
             print(f"Initial Read: Temperature={temp:.2f}°C, Humidity={hum:.2f}%")
         else:
-            print("Initial read failed.")
+            print("Initial read failed or returned None.")
 
-        print("\nReading periodically for 20 seconds...")
-        for i in range(10):
+        # Wait a bit longer to allow initialization to potentially finish
+        print("\nWaiting for potential initialization completion (max 5 seconds)...")
+        for _ in range(5):
+            if sensor.dht_device or sensor.is_dummy: # Check if init finished (success or dummy)
+                print("Initialization likely complete or switched to dummy.")
+                break
+            time.sleep(1)
+        else:
+            print("Initialization might still be ongoing or failed.")
+
+
+        print("\nReading periodically for 10 seconds...")
+        for i in range(5): # Reduced loop for faster testing
             temp, hum = sensor.read()
             if temp is not None and hum is not None:
-                print(f"Read {i+1}: Temp={temp:.2f}°C, Hum={hum:.2f}%")
+                print(f"Read {i+1}: Temp={temp:.2f}°C, Hum={hum:.2f}% (Is dummy: {sensor.is_dummy}, Device: {'OK' if sensor.dht_device else 'None'})")
             else:
                 print(f"Read {i+1}: Failed")
             # Respect the sensor's minimum read interval
@@ -191,7 +260,9 @@ if __name__ == '__main__':
 
     except Exception as e:
         print(f"\nAn error occurred during testing: {e}")
-        print("Ensure the Adafruit_DHT library is installed (`pip install Adafruit_DHT`)")
+        import traceback
+        traceback.print_exc()
+        print("\nEnsure the Adafruit_DHT library is installed (`pip install Adafruit_DHT`)")
         print("Ensure the script is run with sufficient permissions (e.g., using sudo)")
         print("Check GPIO pin connection and sensor power.")
     finally:
