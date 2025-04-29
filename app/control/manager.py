@@ -6,13 +6,13 @@ from typing import Dict, Any, Optional, List
 from ..hal.dht_sensor import DHT22Sensor
 from ..hal.o2_sensor import DFRobotO2Sensor
 from ..hal.relay_output import RelayOutput
-# from ..hal.co2_sensor import SprintIRCO2Sensor # Placeholder
+from ..hal.co2_sensor import CO2Sensor # Import the new dummy sensor
 
 # Control Loop Imports
 from .temperature import TemperatureLoop
 from .humidity import HumidityLoop
 from .o2 import O2Loop
-# from .co2 import CO2Loop # Placeholder
+from .co2 import CO2Loop # Import the new control loop
 
 # Data Logger Import
 from ..datalogger import DataLogger
@@ -22,8 +22,9 @@ from ..datalogger import DataLogger
 DHT_PIN = 4
 HEATER_PIN = 17
 HUMIDIFIER_PIN = 27
-CO2_VALVE_PIN = 22
+# CO2_VALVE_PIN = 22 # This seemed to be for adding CO2, replaced by vent control
 ARGON_VALVE_PIN = 23
+CO2_VENT_PIN = 24      # Pin for the CO2 vent relay, controlled by CO2Loop
 
 # I2C Configuration
 O2_SENSOR_ADDR = 0x73 # Default for DFRobot Gravity O2, confirm if different
@@ -36,7 +37,7 @@ LOGGING_INTERVAL = 60.0 # seconds
 DEFAULT_TEMP_SETPOINT = 37.0
 DEFAULT_HUMIDITY_SETPOINT = 60.0
 DEFAULT_O2_SETPOINT = 5.0 # Target O2 level (Argon triggers if O2 > this)
-# DEFAULT_CO2_SETPOINT = 5.0 # Placeholder
+DEFAULT_CO2_SETPOINT = 1000.0 # Default max CO2 level in ppm
 
 # PID / Hysteresis Parameters
 TEMP_PID_P = 5.0
@@ -59,12 +60,13 @@ class ControlManager:
         print("  Initializing HAL components...")
         self.dht_sensor = DHT22Sensor(DHT_PIN)
         self.o2_sensor = DFRobotO2Sensor(i2c_address=O2_SENSOR_ADDR)
-        # self.co2_sensor = SprintIRCO2Sensor(...) # Placeholder
+        self.co2_sensor = CO2Sensor() # Initialize dummy CO2 sensor
 
         self.heater_relay = RelayOutput(HEATER_PIN, initial_value=False)
         self.humidifier_relay = RelayOutput(HUMIDIFIER_PIN, initial_value=False)
         self.argon_valve_relay = RelayOutput(ARGON_VALVE_PIN, initial_value=False)
-        self.co2_valve_relay = RelayOutput(CO2_VALVE_PIN, initial_value=False) # Placeholder control
+        # self.co2_valve_relay = RelayOutput(CO2_VALVE_PIN, initial_value=False) # Removed, vent relay handled in CO2Loop
+        # Note: CO2Loop itself will initialize the vent relay on CO2_VENT_PIN
 
         # 2. Initialize Control Loops
         print("  Initializing Control Loops...")
@@ -88,7 +90,12 @@ class ControlManager:
             setpoint=DEFAULT_O2_SETPOINT,
             sample_time=CONTROL_SAMPLE_TIME
         )
-        # self.co2_loop = CO2Loop(...) # Placeholder
+        self.co2_loop = CO2Loop(
+            sensor=self.co2_sensor,
+            vent_relay_pin=CO2_VENT_PIN,
+            setpoint=DEFAULT_CO2_SETPOINT
+            # sample_time is handled by its internal default or can be added if needed
+        )
 
         # 3. Initialize Data Logger
         print("  Initializing Data Logger...")
@@ -109,11 +116,11 @@ class ControlManager:
                     'temperature': status.get('temperature'),
                     'humidity': status.get('humidity'),
                     'o2': status.get('o2'),
-                    'co2': status.get('co2'), # Will be None
+                    'co2': status.get('co2_ppm'), # Get from CO2 loop status
                     'temp_setpoint': status.get('temp_setpoint'),
                     'humidity_setpoint': status.get('humidity_setpoint'),
                     'o2_setpoint': status.get('o2_setpoint'),
-                    'co2_setpoint': status.get('co2_setpoint') # Will be None
+                    'co2_setpoint': status.get('co2_setpoint_ppm') # Get from CO2 loop status
                 }
                 await self.logger.log_data(log_data)
                 # print("Logged data point.") # Debugging
@@ -143,7 +150,7 @@ class ControlManager:
                 asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
                 asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
                 asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
-                # asyncio.create_task(self.co2_loop.run()), # Placeholder
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"), # Add CO2 loop task
                 asyncio.create_task(self._logging_task(), name="LoggerTask")
             ]
             print(f"Control Manager started with {len(self._running_tasks)} tasks.")
@@ -168,7 +175,7 @@ class ControlManager:
         self.temp_loop.stop()
         self.humidity_loop.stop()
         self.o2_loop.stop()
-        # self.co2_loop.stop() # Placeholder
+        self.co2_loop.stop() # Stop the CO2 loop
 
         # Cancel all running tasks gracefully
         for task in self._running_tasks:
@@ -193,10 +200,12 @@ class ControlManager:
         self.heater_relay.close()
         self.humidifier_relay.close()
         self.argon_valve_relay.close()
-        self.co2_valve_relay.close()
+        # self.co2_valve_relay.close() # Removed
+        if self.co2_loop.vent_relay: # Close vent relay if initialized
+             self.co2_loop.vent_relay.close()
         self.o2_sensor.close()
         # self.dht_sensor doesn't have an explicit close method in the example
-        # self.co2_sensor.close() # Placeholder
+        # self.co2_sensor doesn't have a close method in the dummy implementation
 
         # Close logger connection
         await self.logger.close()
@@ -216,9 +225,10 @@ class ControlManager:
             "o2": self.o2_loop.current_o2,
             "o2_setpoint": self.o2_loop.setpoint,
             "argon_valve_on": self.o2_loop.argon_valve_is_on,
-            "co2": None, # Placeholder
-            "co2_setpoint": None, # Placeholder
-            "co2_valve_on": self.co2_valve_relay.value, # Placeholder state
+            # Get CO2 status from the loop
+            "co2_ppm": self.co2_loop.current_co2,
+            "co2_setpoint_ppm": self.co2_loop.setpoint,
+            "vent_active": self.co2_loop.vent_active,
         }
         return status
 
@@ -237,8 +247,8 @@ class ControlManager:
             self.humidity_loop.update_setpoint(setpoints['humidity'])
         if 'o2' in setpoints:
             self.o2_loop.update_setpoint(setpoints['o2'])
-        # if 'co2' in setpoints:
-        #     self.co2_loop.update_setpoint(setpoints['co2']) # Placeholder
+        if 'co2' in setpoints:
+             self.co2_loop.setpoint = setpoints['co2'] # Use the setter property
 
     async def __aenter__(self):
         """Allows using 'async with ControlManager(...)' syntax."""

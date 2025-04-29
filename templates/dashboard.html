@@ -65,19 +65,17 @@
                  <div id="argon-status" class="relay-status relay-off">Argon Valve OFF</div>
             </div>
 
-            <!-- CO2 (Placeholder) -->
-            <!--
+            <!-- CO2 -->
             <div class="status-item">
                 <h3>CO2</h3>
-                <span class="value" id="co2-current">--</span><span class="unit"> %</span>
+                <span class="value" id="co2-current">--</span><span class="unit"> ppm</span>
                  <div class="setpoint-section">
-                    Setpoint: <input type="number" step="0.1" id="co2-setpoint-input" class="setpoint-input">
+                    Setpoint: <input type="number" step="10" id="co2-setpoint-input" class="setpoint-input">
                     <button class="setpoint-button" onclick="updateSetpoints()">Set</button>
-                    <br>Target: <span id="co2-setpoint-display">--</span> %
+                    <br>Target Max: <span id="co2-setpoint-display">--</span> ppm
                 </div>
-                 <div id="co2-valve-status" class="relay-status relay-off">CO2 Valve OFF</div>
+                 <div id="vent-status" class="relay-status relay-off">Vent OFF</div>
             </div>
-            -->
         </div>
 
         <a href="/download_log" class="log-link" target="_blank">Download Log Data (CSV)</a>
@@ -160,14 +158,14 @@
                  o2Input.value = data.o2_setpoint.toFixed(1);
             }
 
-            // CO2 (Placeholder)
-            // document.getElementById('co2-current').textContent = data.co2 !== null ? data.co2.toFixed(2) : '--';
-            // document.getElementById('co2-setpoint-display').textContent = data.co2_setpoint !== null ? data.co2_setpoint.toFixed(1) : '--';
-            // updateRelayStatus('co2-valve-status', data.co2_valve_on, 'CO2 Valve');
-            // const co2Input = document.getElementById('co2-setpoint-input');
-            // if (document.activeElement !== co2Input && data.co2_setpoint !== null) {
-            //     co2Input.value = data.co2_setpoint.toFixed(1);
-            // }
+            // CO2
+            document.getElementById('co2-current').textContent = data.co2_ppm !== null ? data.co2_ppm.toFixed(0) : '--';
+            document.getElementById('co2-setpoint-display').textContent = data.co2_setpoint_ppm !== null ? data.co2_setpoint_ppm.toFixed(0) : '--';
+            updateRelayStatus('vent-status', data.vent_active, 'Vent');
+            const co2Input = document.getElementById('co2-setpoint-input');
+            if (document.activeElement !== co2Input && data.co2_setpoint_ppm !== null) {
+                co2Input.value = data.co2_setpoint_ppm.toFixed(0);
+            }
         }
 
         function updateRelayStatus(elementId, isOn, name) {
@@ -186,13 +184,13 @@
             const tempSetpoint = document.getElementById('temp-setpoint-input').value;
             const humSetpoint = document.getElementById('hum-setpoint-input').value;
             const o2Setpoint = document.getElementById('o2-setpoint-input').value;
-            // const co2Setpoint = document.getElementById('co2-setpoint-input').value; // Placeholder
+            const co2Setpoint = document.getElementById('co2-setpoint-input').value;
 
             const setpoints = {};
             if (tempSetpoint !== '') setpoints.temperature = parseFloat(tempSetpoint);
             if (humSetpoint !== '') setpoints.humidity = parseFloat(humSetpoint);
             if (o2Setpoint !== '') setpoints.o2 = parseFloat(o2Setpoint);
-            // if (co2Setpoint !== '') setpoints.co2 = parseFloat(co2Setpoint); // Placeholder
+            if (co2Setpoint !== '') setpoints.co2 = parseFloat(co2Setpoint);
 
             if (Object.keys(setpoints).length === 0) {
                 errorDiv.textContent = 'No setpoint values entered.';
