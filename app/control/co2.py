@@ -1,6 +1,6 @@
 import asyncio
 import time
-from . import BaseLoop
+from .base_loop import BaseLoop # Corrected import
 from ..hal.co2_sensor import CO2Sensor
 from ..hal.relay_output import RelayOutput
 

@@ -2,8 +2,9 @@ import asyncio
 import time
 from ..hal.o2_sensor import DFRobotO2Sensor
 from ..hal.relay_output import RelayOutput
+from .base_loop import BaseLoop # Import BaseLoop
 
-class O2Loop:
+class O2Loop(BaseLoop): # Inherit from BaseLoop
     """
     Manages the O2 control loop using simple threshold control.
     Reads O2 concentration from a DFRobot sensor and controls an Argon valve relay
@@ -25,15 +26,18 @@ class O2Loop:
             setpoint: The target O2 percentage. Argon valve opens if O2 > setpoint.
             sample_time: How often the control loop runs (seconds).
         """
+        # Call BaseLoop constructor with the sample_time as control_interval
+        super().__init__(control_interval=sample_time)
+
         self.o2_sensor = o2_sensor
         self.argon_valve_relay = argon_valve_relay
         self._setpoint = setpoint
-        self._sample_time = sample_time
+        # self._sample_time = sample_time # Handled by BaseLoop
 
         self._current_o2: float | None = None
         self._argon_valve_on: bool = False
-        self._last_update_time: float = 0
-        self._active = True # Flag to control the run loop
+        # self._last_update_time: float = 0 # Handled by BaseLoop timing
+        # self._active = True # Replaced by BaseLoop._is_running and _stop_event
 
         # Attempt initial sensor read
         self._read_sensor()
@@ -50,7 +54,7 @@ class O2Loop:
             # self._current_o2 = None # Option 1: Indicate failure
             pass # Option 2: Keep last known value (use with caution)
 
-    def _update_control(self):
+    async def control_step(self): # Rename _update_control to control_step
         """Applies threshold logic and updates the Argon valve relay state."""
         if self._current_o2 is None:
             # Safety measure: If we don't know the O2 level, keep the Argon valve closed.
@@ -73,30 +77,28 @@ class O2Loop:
                 print(f"Argon Valve OFF (O2: {self._current_o2:.2f}% <= Setpoint: {self._setpoint:.1f}%)")
             self._argon_valve_on = new_argon_valve_state
 
-    async def run(self):
-        """Runs the O2 control loop asynchronously."""
-        print("O2 control loop started.")
-        while self._active:
-            start_time = time.monotonic()
+    # Remove the custom run() method, BaseLoop provides it.
+    # async def run(self): ...
 
-            self._read_sensor()
-            self._update_control()
+    async def stop(self):
+        """Stops the loop and ensures the Argon valve is turned off."""
+        # Call BaseLoop's stop first
+        await super().stop()
+        # Ensure Argon valve is off as a final step
+        if self.argon_valve_relay and self._argon_valve_on:
+             print("O2Loop stopping: Turning Argon valve OFF.")
+             self.argon_valve_relay.off()
+             self._argon_valve_on = False
+        # No need to print "stopped" here, BaseLoop does it.
 
-            self._last_update_time = time.monotonic()
-            elapsed_time = self._last_update_time - start_time
+    # Change update_setpoint to a setter property
+    @property
+    def setpoint(self) -> float:
+        """Returns the current O2 threshold setpoint."""
+        return self._setpoint
 
-            # Wait until the next sample time
-            wait_time = max(0, self._sample_time - elapsed_time)
-            await asyncio.sleep(wait_time)
-
-        print("O2 control loop stopped.")
-        self.argon_valve_relay.off() # Ensure Argon valve is off when loop stops
-
-    def stop(self):
-        """Stops the control loop."""
-        self._active = False
-
-    def update_setpoint(self, new_setpoint: float):
+    @setpoint.setter
+    def setpoint(self, new_setpoint: float):
         """Updates the target O2 threshold."""
         try:
             new_setpoint = float(new_setpoint)
@@ -114,25 +116,30 @@ class O2Loop:
         """Returns the last read O2 concentration."""
         return self._current_o2
 
+    # Keep current_o2 property
     @property
-    def setpoint(self) -> float:
-        """Returns the current O2 threshold setpoint."""
-        return self._setpoint
+    def current_o2(self) -> float | None:
+        """Returns the last read O2 concentration."""
+        return self._current_o2
 
+    # Keep argon_valve_is_on property
     @property
     def argon_valve_is_on(self) -> bool:
         """Returns True if the Argon valve relay is currently commanded ON."""
         return self._argon_valve_on
 
-    def close(self):
-        """Stops the loop and releases resources."""
-        print("Closing O2Loop resources...")
-        self.stop()
-        # Relay resources are closed by its own __del__ or explicit close if needed elsewhere
+    def get_status(self) -> dict:
+        """Returns the current status of the O2 loop."""
+        return {
+            "o2": self.current_o2,
+            "setpoint": self.setpoint,
+            "argon_valve_on": self.argon_valve_is_on,
+            "control_interval_s": self.control_interval
+        }
 
-    def __del__(self):
-        """Ensures the loop is stopped upon object deletion."""
-        self.stop()
+    # Remove close() and __del__(), rely on manager calling stop() and closing relays
+    # def close(self): ...
+    # def __del__(self): ...
 
 # Example Usage (Conceptual - requires running within an asyncio loop)
 # async def main():

@@ -2,8 +2,9 @@ import asyncio
 import time
 from ..hal.dht_sensor import DHT22Sensor
 from ..hal.relay_output import RelayOutput
+from .base_loop import BaseLoop # Import BaseLoop
 
-class HumidityLoop:
+class HumidityLoop(BaseLoop): # Inherit from BaseLoop
     """
     Manages the humidity control loop using hysteresis (bang-bang with deadband).
     Reads humidity from a DHT22 sensor and controls a humidifier relay.
@@ -29,11 +30,14 @@ class HumidityLoop:
         if hysteresis <= 0:
             raise ValueError("Hysteresis must be a positive value.")
 
+        # Call BaseLoop constructor with the sample_time as control_interval
+        super().__init__(control_interval=sample_time)
+
         self.humidity_sensor = humidity_sensor
         self.humidifier_relay = humidifier_relay
         self._setpoint = setpoint
         self._hysteresis = hysteresis
-        self._sample_time = sample_time
+        # self._sample_time = sample_time # Handled by BaseLoop
 
         # Calculate thresholds based on setpoint and hysteresis
         self._turn_on_threshold = self._setpoint - (self._hysteresis / 2.0)
@@ -41,8 +45,8 @@ class HumidityLoop:
 
         self._current_humidity: float | None = None
         self._humidifier_on: bool = False
-        self._last_update_time: float = 0
-        self._active = True # Flag to control the run loop
+        # self._last_update_time: float = 0 # Handled by BaseLoop timing
+        # self._active = True # Replaced by BaseLoop._is_running and _stop_event
 
         # Attempt initial sensor read
         self._read_sensor()
@@ -62,7 +66,7 @@ class HumidityLoop:
             pass # Option 2: Keep last known value (use with caution)
 
 
-    def _update_control(self):
+    async def control_step(self): # Rename _update_control to control_step
         """Applies hysteresis logic and updates the humidifier relay state."""
         if self._current_humidity is None:
             # Safety measure: If we don't know the humidity, turn the humidifier off.
@@ -94,30 +98,28 @@ class HumidityLoop:
                 print(f"Humidifier OFF (Hum: {self._current_humidity:.2f}%, Setpoint: {self._setpoint:.1f}%, Threshold: >= {self._turn_off_threshold:.1f}%)")
             self._humidifier_on = new_humidifier_state
 
-    async def run(self):
-        """Runs the humidity control loop asynchronously."""
-        print("Humidity control loop started.")
-        while self._active:
-            start_time = time.monotonic()
+    # Remove the custom run() method, BaseLoop provides it.
+    # async def run(self): ...
 
-            self._read_sensor()
-            self._update_control()
+    async def stop(self):
+        """Stops the loop and ensures the humidifier is turned off."""
+        # Call BaseLoop's stop first
+        await super().stop()
+        # Ensure humidifier is off as a final step
+        if self.humidifier_relay and self._humidifier_on:
+             print("HumidityLoop stopping: Turning humidifier OFF.")
+             self.humidifier_relay.off()
+             self._humidifier_on = False
+        # No need to print "stopped" here, BaseLoop does it.
 
-            self._last_update_time = time.monotonic()
-            elapsed_time = self._last_update_time - start_time
+    # Change update_setpoint to a setter property
+    @property
+    def setpoint(self) -> float:
+        """Returns the current target humidity."""
+        return self._setpoint
 
-            # Wait until the next sample time
-            wait_time = max(0, self._sample_time - elapsed_time)
-            await asyncio.sleep(wait_time)
-
-        print("Humidity control loop stopped.")
-        self.humidifier_relay.off() # Ensure humidifier is off when loop stops
-
-    def stop(self):
-        """Stops the control loop."""
-        self._active = False
-
-    def update_setpoint(self, new_setpoint: float):
+    @setpoint.setter
+    def setpoint(self, new_setpoint: float):
         """Updates the target humidity and recalculates thresholds."""
         try:
             new_setpoint = float(new_setpoint)
@@ -137,25 +139,33 @@ class HumidityLoop:
         """Returns the last read humidity."""
         return self._current_humidity
 
+    # Keep current_humidity property
     @property
-    def setpoint(self) -> float:
-        """Returns the current target humidity."""
-        return self._setpoint
+    def current_humidity(self) -> float | None:
+        """Returns the last read humidity."""
+        return self._current_humidity
 
+    # Keep humidifier_is_on property
     @property
     def humidifier_is_on(self) -> bool:
         """Returns True if the humidifier relay is currently commanded ON."""
         return self._humidifier_on
 
-    def close(self):
-        """Stops the loop and releases resources."""
-        print("Closing HumidityLoop resources...")
-        self.stop()
-        # Relay resources are closed by its own __del__ or explicit close if needed elsewhere
+    def get_status(self) -> dict:
+        """Returns the current status of the humidity loop."""
+        return {
+            "humidity": self.current_humidity,
+            "setpoint": self.setpoint,
+            "humidifier_on": self.humidifier_is_on,
+            "hysteresis": self._hysteresis,
+            "on_threshold": self._turn_on_threshold,
+            "off_threshold": self._turn_off_threshold,
+            "control_interval_s": self.control_interval
+        }
 
-    def __del__(self):
-        """Ensures the loop is stopped upon object deletion."""
-        self.stop()
+    # Remove close() and __del__(), rely on manager calling stop() and closing relays
+    # def close(self): ...
+    # def __del__(self): ...
 
 # Example Usage (Conceptual - requires running within an asyncio loop)
 # async def main():

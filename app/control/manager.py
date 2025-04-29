@@ -241,14 +241,19 @@ class ControlManager:
                        (and eventually 'co2') and values are the new float setpoints.
         """
         print(f"Updating setpoints: {setpoints}")
-        if 'temperature' in setpoints:
-            self.temp_loop.update_setpoint(setpoints['temperature'])
-        if 'humidity' in setpoints:
-            self.humidity_loop.update_setpoint(setpoints['humidity'])
-        if 'o2' in setpoints:
-            self.o2_loop.update_setpoint(setpoints['o2'])
-        if 'co2' in setpoints:
-             self.co2_loop.setpoint = setpoints['co2'] # Use the setter property
+        try:
+            if 'temperature' in setpoints:
+                self.temp_loop.setpoint = float(setpoints['temperature']) # Use setter
+            if 'humidity' in setpoints:
+                self.humidity_loop.setpoint = float(setpoints['humidity']) # Use setter
+            if 'o2' in setpoints:
+                self.o2_loop.setpoint = float(setpoints['o2']) # Use setter
+            if 'co2' in setpoints:
+                 self.co2_loop.setpoint = float(setpoints['co2']) # Use setter (already correct)
+        except ValueError as e:
+             print(f"Error updating setpoints: Invalid value type - {e}")
+        except Exception as e:
+             print(f"Unexpected error updating setpoints: {e}")
 
     async def __aenter__(self):
         """Allows using 'async with ControlManager(...)' syntax."""

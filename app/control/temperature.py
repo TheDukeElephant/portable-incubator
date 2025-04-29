@@ -3,8 +3,9 @@ import time
 from simple_pid import PID
 from ..hal.dht_sensor import DHT22Sensor
 from ..hal.relay_output import RelayOutput
+from .base_loop import BaseLoop # Import BaseLoop
 
-class TemperatureLoop:
+class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     """
     Manages the temperature control loop using a PID controller.
     Reads temperature from a DHT22 sensor and controls a heater relay.
@@ -32,6 +33,9 @@ class TemperatureLoop:
             sample_time: How often the control loop runs (seconds).
             output_threshold: The PID output value above which the heater turns on.
         """
+        # Call BaseLoop constructor with the sample_time as control_interval
+        super().__init__(control_interval=sample_time)
+
         self.temp_sensor = temp_sensor
         self.heater_relay = heater_relay
         self._output_threshold = output_threshold
@@ -43,8 +47,8 @@ class TemperatureLoop:
 
         self._current_temperature: float | None = None
         self._heater_on: bool = False
-        self._last_update_time: float = 0
-        self._active = True # Flag to control the run loop
+        # self._last_update_time: float = 0 # Handled by BaseLoop timing
+        # self._active = True # Replaced by BaseLoop._is_running and _stop_event
 
         # Attempt initial sensor read
         self._read_sensor()
@@ -91,30 +95,34 @@ class TemperatureLoop:
             self._heater_on = new_heater_state
         # else: No change in heater state
 
-    async def run(self):
-        """Runs the temperature control loop asynchronously."""
-        print("Temperature control loop started.")
-        while self._active:
-            start_time = time.monotonic()
+    async def control_step(self):
+        """Performs a single temperature control step."""
+        self._read_sensor()
+        self._update_control()
 
-            self._read_sensor()
-            self._update_control()
+    # Remove the custom run() method, BaseLoop provides it.
+    # async def run(self): ...
 
-            self._last_update_time = time.monotonic()
-            elapsed_time = self._last_update_time - start_time
+    async def stop(self):
+        """Stops the loop and ensures the heater is turned off."""
+        # Call BaseLoop's stop first
+        await super().stop()
+        # Ensure heater is off as a final step
+        if self.heater_relay and self._heater_on:
+             print("TemperatureLoop stopping: Turning heater OFF.")
+             self.heater_relay.off()
+             self._heater_on = False
+        # No need to print "stopped" here, BaseLoop does it.
 
-            # Wait until the next sample time
-            wait_time = max(0, self.pid.sample_time - elapsed_time)
-            await asyncio.sleep(wait_time)
+    # Rename update_setpoint to match setter pattern if desired, or keep as is
+    # Using a setter property might be more consistent with other loops
+    @property
+    def setpoint(self) -> float:
+        """Returns the current target temperature."""
+        return self.pid.setpoint
 
-        print("Temperature control loop stopped.")
-        self.heater_relay.off() # Ensure heater is off when loop stops
-
-    def stop(self):
-        """Stops the control loop."""
-        self._active = False
-
-    def update_setpoint(self, new_setpoint: float):
+    @setpoint.setter
+    def setpoint(self, new_setpoint: float):
         """Updates the target temperature."""
         try:
             self.pid.setpoint = float(new_setpoint)
@@ -122,30 +130,33 @@ class TemperatureLoop:
         except ValueError:
             print(f"Error: Invalid temperature setpoint value: {new_setpoint}")
 
+    # Keep current_temperature property
     @property
     def current_temperature(self) -> float | None:
         """Returns the last read temperature."""
         return self._current_temperature
 
-    @property
-    def setpoint(self) -> float:
-        """Returns the current target temperature."""
-        return self.pid.setpoint
-
+    # Keep heater_is_on property
     @property
     def heater_is_on(self) -> bool:
         """Returns True if the heater relay is currently commanded ON."""
         return self._heater_on
 
-    def close(self):
-        """Stops the loop and releases resources."""
-        print("Closing TemperatureLoop resources...")
-        self.stop()
-        # Relay resources are closed by its own __del__ or explicit close if needed elsewhere
+    def get_status(self) -> dict:
+        """Returns the current status of the temperature loop."""
+        return {
+            "temperature": self.current_temperature,
+            "setpoint": self.setpoint,
+            "heater_on": self.heater_is_on,
+            "pid_p": self.pid.Kp,
+            "pid_i": self.pid.Ki,
+            "pid_d": self.pid.Kd,
+            "control_interval_s": self.control_interval
+        }
 
-    def __del__(self):
-        """Ensures the loop is stopped upon object deletion."""
-        self.stop()
+    # Remove close() and __del__(), rely on manager calling stop() and closing relays
+    # def close(self): ...
+    # def __del__(self): ...
 
 # Example Usage (Conceptual - requires running within an asyncio loop)
 # async def main():
