@@ -1,0 +1,31 @@
+<!doctype html>
+<title>Incubator</title>
+<h1>Incubator dashboard</h1>
+<p>Temp: <span id="t">--</span> °C</p>
+<input id="sp" type="number" step="0.1">
+<button onclick="save()">set</button>
+
+<script>
+const t   = document.getElementById('t');
+const spI = document.getElementById('sp');
+
+async function poll() {
+  const j = await fetch('/telemetry').then(r=>r.json());
+  t.textContent  = j.temperature.toFixed(1);
+  spI.value      = j.setpoints.temperature;
+}
+poll(); setInterval(poll, 5000);
+
+const ws = new WebSocket(`ws://${location.host}/stream`);
+ws.onmessage = ev => {
+  const j = JSON.parse(ev.data);
+  t.textContent = j.temp.toFixed(1);
+};
+
+async function save() {
+  await fetch('/setpoints',{method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({temperature: parseFloat(spI.value)})
+  });
+}
+</script>
