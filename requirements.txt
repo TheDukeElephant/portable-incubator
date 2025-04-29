@@ -1,6 +1,7 @@
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
 gpiozero==2.0
 simple-pid==2.0.0
 aiosqlite==0.20.0
-pydantic==2.7.2
+Adafruit_DHT
+DFRobot_OxygenSensor
+Flask
+Flask-Sock

@@ -1,5 +1,233 @@
-<!-- /opt/incubator/templates/dashboard.html -->
 <!doctype html>
-<title>Incubator OK</title>
-<h1>Incubator controller is running</h1>
-<p>Go to <a href="/telemetry">/telemetry</a> for JSON.</p>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">    <title>Incubator Control</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.5; padding: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .status-item { border: 1px solid #ccc; padding: 15px; border-radius: 5px; background-color: #f9f9f9; }
+        .status-item h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .value { font-size: 1.4em; font-weight: bold; }
+        .unit { font-size: 0.9em; color: #555; }
+        .setpoint-section { margin-top: 10px; }
+        .setpoint-input { width: 70px; padding: 5px; margin-right: 5px; }
+        .setpoint-button { padding: 5px 10px; cursor: pointer; }
+        .relay-status { margin-top: 8px; font-size: 0.9em; padding: 3px 6px; border-radius: 3px; display: inline-block; }
+        .relay-on { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .relay-off { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .error-message { color: red; font-weight: bold; margin-top: 10px; }
+        .log-link { display: block; margin-top: 20px; }
+        #ws-status { margin-top: 15px; font-style: italic; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Incubator Control Panel</h1>
+        <div id="ws-status">Connecting to server...</div>
+        <div id="error-message" class="error-message"></div>
+
+        <div class="status-grid">
+            <!-- Temperature -->
+            <div class="status-item">
+                <h3>Temperature</h3>
+                <span class="value" id="temp-current">--</span><span class="unit"> °C</span>
+                <div class="setpoint-section">
+                    Setpoint: <input type="number" step="0.1" id="temp-setpoint-input" class="setpoint-input">
+                    <button class="setpoint-button" onclick="updateSetpoints()">Set</button>
+                    <br>Target: <span id="temp-setpoint-display">--</span> °C
+                </div>
+                <div id="heater-status" class="relay-status relay-off">Heater OFF</div>
+            </div>
+
+            <!-- Humidity -->
+            <div class="status-item">
+                <h3>Humidity</h3>
+                <span class="value" id="hum-current">--</span><span class="unit"> %</span>
+                 <div class="setpoint-section">
+                    Setpoint: <input type="number" step="0.5" id="hum-setpoint-input" class="setpoint-input">
+                    <button class="setpoint-button" onclick="updateSetpoints()">Set</button>
+                    <br>Target: <span id="hum-setpoint-display">--</span> %
+                </div>
+                <div id="humidifier-status" class="relay-status relay-off">Humidifier OFF</div>
+            </div>
+
+            <!-- Oxygen -->
+            <div class="status-item">
+                <h3>Oxygen</h3>
+                <span class="value" id="o2-current">--</span><span class="unit"> %</span>
+                 <div class="setpoint-section">
+                    Setpoint: <input type="number" step="0.1" id="o2-setpoint-input" class="setpoint-input">
+                    <button class="setpoint-button" onclick="updateSetpoints()">Set</button>
+                    <br>Target: <span id="o2-setpoint-display">--</span> % (Argon ON if > Target)
+                </div>
+                 <div id="argon-status" class="relay-status relay-off">Argon Valve OFF</div>
+            </div>
+
+            <!-- CO2 (Placeholder) -->
+            <!--
+            <div class="status-item">
+                <h3>CO2</h3>
+                <span class="value" id="co2-current">--</span><span class="unit"> %</span>
+                 <div class="setpoint-section">
+                    Setpoint: <input type="number" step="0.1" id="co2-setpoint-input" class="setpoint-input">
+                    <button class="setpoint-button" onclick="updateSetpoints()">Set</button>
+                    <br>Target: <span id="co2-setpoint-display">--</span> %
+                </div>
+                 <div id="co2-valve-status" class="relay-status relay-off">CO2 Valve OFF</div>
+            </div>
+            -->
+        </div>
+
+        <a href="/download_log" class="log-link" target="_blank">Download Log Data (CSV)</a>
+
+    </div>
+
+    <script>
+        const wsStatusDiv = document.getElementById('ws-status');
+        const errorDiv = document.getElementById('error-message');
+
+        // --- WebSocket Connection ---
+        let socket;
+        const wsUrl = `ws://${window.location.host}/stream`; // Adjust if needed
+
+        function connectWebSocket() {
+            wsStatusDiv.textContent = 'Connecting...';
+            errorDiv.textContent = ''; // Clear previous errors
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = function(event) {
+                console.log("WebSocket connection opened");
+                wsStatusDiv.textContent = 'Connected';
+            };
+
+            socket.onmessage = function(event) {
+                // console.log("Message from server: ", event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    updateUI(data);
+                } catch (e) {
+                    console.error("Failed to parse WebSocket message:", e);
+                    errorDiv.textContent = 'Error processing server update.';
+                }
+            };
+
+            socket.onerror = function(event) {
+                console.error("WebSocket error observed:", event);
+                wsStatusDiv.textContent = 'Connection Error!';
+                errorDiv.textContent = 'WebSocket connection error. Check server status.';
+                // Optional: Attempt to reconnect after a delay
+                // setTimeout(connectWebSocket, 5000);
+            };
+
+            socket.onclose = function(event) {
+                console.log("WebSocket connection closed:", event);
+                wsStatusDiv.textContent = 'Disconnected. Attempting to reconnect...';
+                // Attempt to reconnect after a delay
+                setTimeout(connectWebSocket, 5000); // Reconnect every 5 seconds
+            };
+        }
+
+        // --- UI Update Function ---
+        function updateUI(data) {
+            // Temperature
+            document.getElementById('temp-current').textContent = data.temperature !== null ? data.temperature.toFixed(2) : '--';
+            document.getElementById('temp-setpoint-display').textContent = data.temp_setpoint !== null ? data.temp_setpoint.toFixed(2) : '--';
+            updateRelayStatus('heater-status', data.heater_on, 'Heater');
+            // Only update input if it doesn't have focus to avoid disrupting user input
+            const tempInput = document.getElementById('temp-setpoint-input');
+            if (document.activeElement !== tempInput && data.temp_setpoint !== null) {
+                 tempInput.value = data.temp_setpoint.toFixed(2);
+            }
+
+
+            // Humidity
+            document.getElementById('hum-current').textContent = data.humidity !== null ? data.humidity.toFixed(2) : '--';
+            document.getElementById('hum-setpoint-display').textContent = data.humidity_setpoint !== null ? data.humidity_setpoint.toFixed(1) : '--';
+            updateRelayStatus('humidifier-status', data.humidifier_on, 'Humidifier');
+            const humInput = document.getElementById('hum-setpoint-input');
+             if (document.activeElement !== humInput && data.humidity_setpoint !== null) {
+                 humInput.value = data.humidity_setpoint.toFixed(1);
+            }
+
+            // Oxygen
+            document.getElementById('o2-current').textContent = data.o2 !== null ? data.o2.toFixed(2) : '--';
+            document.getElementById('o2-setpoint-display').textContent = data.o2_setpoint !== null ? data.o2_setpoint.toFixed(1) : '--';
+            updateRelayStatus('argon-status', data.argon_valve_on, 'Argon Valve');
+             const o2Input = document.getElementById('o2-setpoint-input');
+             if (document.activeElement !== o2Input && data.o2_setpoint !== null) {
+                 o2Input.value = data.o2_setpoint.toFixed(1);
+            }
+
+            // CO2 (Placeholder)
+            // document.getElementById('co2-current').textContent = data.co2 !== null ? data.co2.toFixed(2) : '--';
+            // document.getElementById('co2-setpoint-display').textContent = data.co2_setpoint !== null ? data.co2_setpoint.toFixed(1) : '--';
+            // updateRelayStatus('co2-valve-status', data.co2_valve_on, 'CO2 Valve');
+            // const co2Input = document.getElementById('co2-setpoint-input');
+            // if (document.activeElement !== co2Input && data.co2_setpoint !== null) {
+            //     co2Input.value = data.co2_setpoint.toFixed(1);
+            // }
+        }
+
+        function updateRelayStatus(elementId, isOn, name) {
+            const element = document.getElementById(elementId);
+            if (isOn) {
+                element.textContent = `${name} ON`;
+                element.className = 'relay-status relay-on';
+            } else {
+                element.textContent = `${name} OFF`;
+                element.className = 'relay-status relay-off';
+            }
+        }
+
+        // --- Setpoint Update Function ---
+        function updateSetpoints() {
+            const tempSetpoint = document.getElementById('temp-setpoint-input').value;
+            const humSetpoint = document.getElementById('hum-setpoint-input').value;
+            const o2Setpoint = document.getElementById('o2-setpoint-input').value;
+            // const co2Setpoint = document.getElementById('co2-setpoint-input').value; // Placeholder
+
+            const setpoints = {};
+            if (tempSetpoint !== '') setpoints.temperature = parseFloat(tempSetpoint);
+            if (humSetpoint !== '') setpoints.humidity = parseFloat(humSetpoint);
+            if (o2Setpoint !== '') setpoints.o2 = parseFloat(o2Setpoint);
+            // if (co2Setpoint !== '') setpoints.co2 = parseFloat(co2Setpoint); // Placeholder
+
+            if (Object.keys(setpoints).length === 0) {
+                errorDiv.textContent = 'No setpoint values entered.';
+                return;
+            }
+
+            console.log("Sending setpoints:", setpoints);
+            errorDiv.textContent = ''; // Clear previous errors
+
+            fetch('/setpoints', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(setpoints),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Setpoint update response:', data);
+                if (!data.ok) {
+                    errorDiv.textContent = `Error updating setpoints: ${data.error || 'Unknown error'}`;
+                } else {
+                     // Optionally clear inputs or provide success message
+                     console.log("Setpoints updated successfully.");
+                }
+            })
+            .catch((error) => {
+                console.error('Error sending setpoints:', error);
+                errorDiv.textContent = 'Failed to send setpoints to server.';
+            });
+        }
+
+        // --- Initial Connection ---
+        connectWebSocket();
+
+    </script>
+</body>
+</html>
