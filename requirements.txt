@@ -1,6 +1,5 @@
 gpiozero==2.0
 simple-pid==2.0.0
 aiosqlite==0.20.0
-Adafruit_DHT
 Flask
 Flask-Sock
