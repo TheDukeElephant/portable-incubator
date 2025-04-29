@@ -10,4 +10,4 @@ class TemperatureLoop:
         while True:
             # fake physics
             self.current += (self.pid(self.current) > 0) * 0.2 - 0.1
-            time.sleep(1)
+            await asyncio.sleep(1)
