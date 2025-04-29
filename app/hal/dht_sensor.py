@@ -1,8 +1,8 @@
+import adafruit_dht
+import board
 import time
-import Adafruit_DHT
-
 # Sensor type: Adafruit_DHT.DHT11, Adafruit_DHT.DHT22, or Adafruit_DHT.AM2302
-SENSOR_TYPE = Adafruit_DHT.DHT22
+SENSOR_TYPE = adafruit_dht.DHT22
 
 class DHT22Sensor:
     """
