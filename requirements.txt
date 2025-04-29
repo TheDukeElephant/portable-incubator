@@ -5,5 +5,3 @@ simple-pid==2.0.0
 aiosqlite==0.20.0
 gpiozero==2.0          # replaces RPi.GPIO
 adafruit-circuitpython-dht==3.9.4
-pydantic-settings==2.9.1
-# remove: RPi.GPIO, rpi-ws281x, sysv-ipc, Adafruit_DHT
