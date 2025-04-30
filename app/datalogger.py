@@ -5,30 +5,14 @@ import time
 import csv
 import io
 from typing import Optional, Dict, Any, List, Tuple
-import os # Added for checking file existence
 
-# --- Constants ---
 DEFAULT_DB_PATH = "incubator_log.db"
 TABLE_NAME = "logs"
-LOCAL_LOG_FILE = "local_data_log.csv" # Path for offline CSV log
-
-# --- Column Headers (consistent order for DB and CSV) ---
-LOG_HEADERS = [
-    "timestamp", "temperature", "humidity", "o2", "co2",
-    "temp_setpoint", "humidity_setpoint", "o2_setpoint", "co2_setpoint"
-]
-
-# --- Placeholder for network status ---
-def is_offline() -> bool:
-    """Placeholder function to simulate offline status."""
-    # In a real implementation, this would check network connectivity.
-    # For now, always return True to test local logging.
-    return True
 
 class DataLogger:
     """
     Handles asynchronous logging of incubator data to an SQLite database
-    and provides methods for data retrieval. Also handles offline logging to CSV.
+    and provides methods for data retrieval.
     """
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         """
@@ -40,7 +24,6 @@ class DataLogger:
         self.db_path = db_path
         self._db: Optional[aiosqlite.Connection] = None
         self._lock = asyncio.Lock() # To prevent concurrent writes during initialization
-        self.local_log_file = LOCAL_LOG_FILE # Store local log path
 
     async def initialize(self):
         """
@@ -51,15 +34,17 @@ class DataLogger:
             if self._db is None:
                 try:
                     self._db = await aiosqlite.connect(self.db_path)
-                    # Use LOG_HEADERS to define table columns dynamically
-                    # Ensure timestamp is PRIMARY KEY
-                    columns_sql_parts = [f"{LOG_HEADERS[0]} REAL PRIMARY KEY"]
-                    columns_sql_parts.extend([f"{col} REAL" for col in LOG_HEADERS[1:]])
-                    columns_sql = ",\n                            ".join(columns_sql_parts)
-
                     await self._db.execute(f"""
                         CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                            {columns_sql}
+                            timestamp REAL PRIMARY KEY,
+                            temperature REAL,
+                            humidity REAL,
+                            o2 REAL,
+                            co2 REAL,
+                            temp_setpoint REAL,
+                            humidity_setpoint REAL,
+                            o2_setpoint REAL,
+                            co2_setpoint REAL
                         )
                     """)
                     await self._db.commit()
@@ -69,68 +54,42 @@ class DataLogger:
                     self._db = None # Ensure db is None if init fails
                     raise # Re-raise the exception
 
-    # --- Internal Methods ---
-    def _log_to_csv(self, data: Dict[str, Optional[float]], timestamp: float):
-        """Logs data to the local CSV file."""
-        file_exists = os.path.isfile(self.local_log_file)
-        try:
-            # Convert timestamp to ISO format string for readability
-            try:
-                dt_object = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
-                formatted_timestamp = dt_object.isoformat()
-            except (TypeError, ValueError):
-                formatted_timestamp = str(timestamp) # Fallback to raw timestamp if conversion fails
-
-            # Prepare data row in the correct order using LOG_HEADERS
-            # Ensure timestamp is the first element
-            log_entry = [formatted_timestamp] + [data.get(header) for header in LOG_HEADERS[1:]]
-
-            with open(self.local_log_file, 'a', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                if not file_exists or os.path.getsize(self.local_log_file) == 0:
-                    writer.writerow(LOG_HEADERS) # Write header if file is new or empty
-                writer.writerow(log_entry)
-            # print(f"Data logged locally to {self.local_log_file}") # Optional debug
-        except IOError as e:
-            print(f"Error writing to local log file {self.local_log_file}: {e}")
-        except Exception as e:
-            print(f"An unexpected error occurred during local logging: {e}")
-
-    # --- Public API ---
     async def log_data(self, data: Dict[str, Optional[float]]):
         """
-        Logs a set of sensor readings and setpoints.
-        If offline (determined by is_offline()), logs to a local CSV file.
-        If online, logs to the SQLite database.
+        Logs a set of sensor readings and setpoints to the database.
 
         Args:
-            data: A dictionary containing the data points. Expected keys match LOG_HEADERS (excluding timestamp).
+            data: A dictionary containing the data points. Expected keys:
+                  'temperature', 'humidity', 'o2', 'co2',
+                  'temp_setpoint', 'humidity_setpoint', 'o2_setpoint', 'co2_setpoint'.
                   Values should be floats or None.
         """
+        if not self._db:
+            print("Error: DataLogger not initialized. Cannot log data.")
+            return
+
         # Use current Unix timestamp for logging
         current_timestamp = time.time()
 
-        # --- Offline Logging Check ---
-        if is_offline():
-            # Use synchronous file I/O for simplicity here.
-            # Consider aiofiles if this becomes a bottleneck.
-            self._log_to_csv(data, current_timestamp)
-            # If offline, we log locally. We skip database logging as per requirement.
-            return # Skip database logging if offline
-
-        # --- Online (Database) Logging ---
-        if not self._db:
-            print("Error: DataLogger not initialized. Cannot log data to database.")
-            # Optional: Could add fallback to local CSV logging here too if DB fails even when "online"
-            return
-
-        # Prepare data tuple in the correct order for the SQL query using LOG_HEADERS
-        # Ensure timestamp is the first element
-        log_entry = tuple([current_timestamp] + [data.get(header) for header in LOG_HEADERS[1:]])
+        # Prepare data tuple in the correct order for the SQL query
+        # Use None for missing keys or if value is None
+        log_entry = (
+            current_timestamp,
+            data.get('temperature'),
+            data.get('humidity'),
+            data.get('o2'),
+            data.get('co2'), # Will be None initially
+            data.get('temp_setpoint'),
+            data.get('humidity_setpoint'),
+            data.get('o2_setpoint'),
+            data.get('co2_setpoint') # Will be None initially
+        )
 
         sql = f"""
-            INSERT INTO {TABLE_NAME} ({', '.join(LOG_HEADERS)})
-            VALUES ({', '.join(['?'] * len(LOG_HEADERS))})
+            INSERT INTO {TABLE_NAME} (
+                timestamp, temperature, humidity, o2, co2,
+                temp_setpoint, humidity_setpoint, o2_setpoint, co2_setpoint
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         try:
@@ -140,9 +99,9 @@ class DataLogger:
                      return
                  await self._db.execute(sql, log_entry)
                  await self._db.commit()
-                 # print(f"Data logged to DB at {current_timestamp}") # Optional: for debugging
+                 # print(f"Data logged at {current_timestamp}") # Optional: for debugging
         except Exception as e:
-            print(f"Error logging data to database: {e}")
+            print(f"Error logging data: {e}")
 
     async def get_data(self, start_time: Optional[float] = None, end_time: Optional[float] = None) -> List[Tuple]:
         """
@@ -200,8 +159,11 @@ class DataLogger:
         if not rows:
             return None # No data or error occurred
 
-        # Use the constant for headers
-        headers = LOG_HEADERS
+        # Define CSV headers matching the table structure
+        headers = [
+            "timestamp", "temperature", "humidity", "o2", "co2",
+            "temp_setpoint", "humidity_setpoint", "o2_setpoint", "co2_setpoint"
+        ]
 
         # Use io.StringIO to write CSV data to a string buffer
         output = io.StringIO()
@@ -252,42 +214,43 @@ class DataLogger:
 #     await logger.initialize()
 #
 #     # Simulate logging some data
-#     # Ensure data keys match LOG_HEADERS (excluding timestamp)
 #     data1 = {'temperature': 25.1, 'humidity': 55.2, 'o2': 20.8, 'co2': None,
 #              'temp_setpoint': 37.0, 'humidity_setpoint': 60.0, 'o2_setpoint': 20.9, 'co2_setpoint': None}
 #     await logger.log_data(data1)
-#     await asyncio.sleep(1) # Give time for potential file write
+#     await asyncio.sleep(1)
 #     data2 = {'temperature': 25.5, 'humidity': 54.8, 'o2': 20.9, 'co2': None,
 #              'temp_setpoint': 37.0, 'humidity_setpoint': 60.0, 'o2_setpoint': 20.9, 'co2_setpoint': None}
 #     await logger.log_data(data2)
 #
-#     # Retrieve data (will be empty if always offline)
-#     print("\nRetrieving all data from DB:")
+#     # Retrieve data
+#     print("\nRetrieving all data:")
 #     all_data = await logger.get_data()
 #     for row in all_data:
 #         print(row)
 #
-#     # Retrieve data as CSV (will be empty if always offline)
-#     print("\nRetrieving data as CSV from DB:")
+#     # Retrieve data as CSV
+#     print("\nRetrieving data as CSV:")
 #     csv_data = await logger.get_data_as_csv()
 #     if csv_data:
 #         print(csv_data)
-#     else:
-#         print("No data in DB to retrieve as CSV.")
 #
 #     await logger.close()
-#     print(f"\nCheck '{LOCAL_LOG_FILE}' for locally logged data.")
 #
 #     # Example using async with
-#     # print("\nTesting with async with:")
-#     # async with DataLogger("test_log2.db") as logger2:
-#     #      await logger2.log_data(data1)
-#     #      csv_data2 = await logger2.get_data_as_csv()
-#     #      print(csv_data2)
+#     print("\nTesting with async with:")
+#     async with DataLogger("test_log2.db") as logger2:
+#          await logger2.log_data(data1)
+#          csv_data2 = await logger2.get_data_as_csv()
+#          print(csv_data2)
 #
 # if __name__ == '__main__':
-#      # Clean up test databases and local log if they exist
-#      # Need to import os here if running this block directly
+#      # Clean up test databases if they exist
 #      import os
-#      if os.path.exists(DEFAULT_DB_PATH): os.remove(DEFAULT_DB_PATH) # Use constant
-#      if os.path.exists("test_log.db"): os.remove("test_log.db") # Example db
+#      if os.path.exists("test_log.db"): os.remove("test_log.db")
+#      if os.path.exists("test_log2.db"): os.remove("test_log2.db")
+#
+#      asyncio.run(main())
+#
+#      # Clean up again after run
+#      if os.path.exists("test_log.db"): os.remove("test_log.db")
+#      if os.path.exists("test_log2.db"): os.remove("test_log2.db")
