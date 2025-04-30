@@ -30,7 +30,7 @@ O2_SENSOR_ADDR = 0x73
 
 # Control Loop Settings
 CONTROL_SAMPLE_TIME = 5.0 # seconds
-LOGGING_INTERVAL = 60.0 # seconds
+LOGGING_INTERVAL = 1.0 # seconds
 
 # Default Setpoints
 DEFAULT_TEMP_SETPOINT = 37.0
