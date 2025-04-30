@@ -263,20 +263,20 @@ h1 {
     min-width: 180px; /* Ensure minimum width */
 }
 
-.button-on {
+.button-of {
     background-color: var(--success-color);
     color: var(--bg-color); /* Dark text on light green */
 }
 
-.button-on:hover {
+.button-off:hover {
     background-color: #58e8a8; /* Slightly lighter green on hover */
 }
 
-.button-off {
+.button-on {
     background-color: var(--danger-color);
     color: #fff; /* White text on red */
 }
 
-.button-off:hover {
+.button-on:hover {
     background-color: #f85a5a; /* Slightly lighter red on hover */
 }
