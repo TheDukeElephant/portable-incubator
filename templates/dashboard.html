@@ -82,21 +82,14 @@
         <div class="log-download-section">
             <label for="log-duration-select">Download Log Data:</label>
             <select id="log-duration-select" class="duration-select">
-<option value="1m">Last 1 Minute</option>
-                <option value="5m">Last 5 Minutes</option>
-                <option value="15m">Last 15 Minutes</option>
-                <option value="30m">Last 30 Minutes</option>
-                <option value="1h">Last 1 Hour</option>
-                <option value="6h">Last 6 Hours</option>
-                <option value="24h">Last 24 Hours</option>
-<option value="2d">Last 2 Days</option>
-                <option value="5d">Last 5 Days</option>
-                <option value="10d">Last 10 Days</option>
-                <option value="20d">Last 20 Days</option>
-                <option value="7d">Last 7 Days</option>
-                <option value="30d">Last 30 Days</option>
-<option value="60d">Last 60 Days</option>
-                <option value="all" selected>All Data</option>
+                {% if duration_options %}
+                    {% for key, value_tuple in duration_options.items() %}
+                        {% set label = value_tuple[0] %}
+                        <option value="{{ key }}" {% if key == 'all' %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                {% else %}
+                    <option value="all" selected>All Data (Error loading options)</option>
+                {% endif %}
             </select>
             <button onclick="downloadLogWithDuration()" class="log-button">Download CSV</button>
         </div>

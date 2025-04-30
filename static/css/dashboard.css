@@ -194,6 +194,11 @@ h1 {
     padding: 8px;
     border-radius: 4px;
     border: 1px solid var(--danger-color);
+    display: none; /* Hide by default */
+}
+
+.error-message.visible {
+    display: block; /* Show when visible class is added */
 }
 /* --- Log Download Section --- */
 .log-download-section {

@@ -14,6 +14,27 @@ main_bp = Blueprint('main', __name__)
 # --- Global Control Manager Instance ---
 manager = ControlManager() # Initialize the manager
 
+# --- Constants ---
+# Define duration map globally for use in both download and UI rendering
+DURATION_MAP = {
+    "1m": ("Last 1 Minute", 60),
+    "5m": ("Last 5 Minutes", 5 * 60),
+    "15m": ("Last 15 Minutes", 15 * 60),
+    "30m": ("Last 30 Minutes", 30 * 60),
+    "1h": ("Last 1 Hour", 3600),
+    "6h": ("Last 6 Hours", 6 * 3600),
+    "24h": ("Last 24 Hours", 24 * 3600),
+    "2d": ("Last 2 Days", 2 * 24 * 3600),
+    "5d": ("Last 5 Days", 5 * 24 * 3600),
+    "7d": ("Last 7 Days", 7 * 24 * 3600),
+    "10d": ("Last 10 Days", 10 * 24 * 3600),
+    "20d": ("Last 20 Days", 20 * 24 * 3600),
+    "30d": ("Last 30 Days", 30 * 24 * 3600),
+    "60d": ("Last 60 Days", 60 * 24 * 3600),
+    "all": ("All Data", None)
+}
+
+
 # --- Background Asyncio Event Loop Handling ---
 _async_loop = None
 _loop_thread = None
@@ -84,7 +105,8 @@ atexit.register(stop_background_loop)
 @main_bp.route("/")
 def ui():
     """Serves the main dashboard UI."""
-    return render_template("dashboard.html")
+    # Pass the duration map to the template
+    return render_template("dashboard.html", duration_options=DURATION_MAP)
 
 @main_bp.route("/status") # Renamed from /telemetry for clarity
 def status():
@@ -124,24 +146,16 @@ def download_log():
 
     # --- Time Range Handling ---
     duration_str = request.args.get('duration', 'all') # Default to 'all' if not provided
-    DURATION_MAP = {
-        "1m": 60,          # Added
-        "5m": 5 * 60,      # Added
-        "15m": 15 * 60,     # Added
-        "30m": 30 * 60,     # Added
-        "1h": 3600,
-        "6h": 6 * 3600,
-        "24h": 24 * 3600,
-        "2d": 2 * 24 * 3600,    # Added
-        "5d": 5 * 24 * 3600,    # Added
-        "10d": 10 * 24 * 3600,   # Added
-        "20d": 20 * 24 * 3600,   # Added
-        "7d": 7 * 24 * 3600,
-        "30d": 30 * 24 * 3600,
-        "60d": 60 * 24 * 3600,   # Added
-        "all": None
-    }
-    duration_seconds = DURATION_MAP.get(duration_str)
+
+    # Use the globally defined DURATION_MAP
+    duration_info = DURATION_MAP.get(duration_str)
+    if duration_info:
+        _, duration_seconds = duration_info # Unpack label and seconds
+    else:
+        # Handle invalid duration string if needed, maybe default to 'all' or return error
+        print(f"Warning: Invalid duration '{duration_str}' received. Defaulting to 'all'.")
+        duration_str = 'all' # Reset to all if invalid
+        duration_seconds = None # Ensure duration_seconds is None for 'all'
 
     start_time = None
     end_time = time.time() # End time is always now

@@ -15,15 +15,26 @@ const chartData = {
 let socket;
 const wsUrl = `ws://${window.location.host}/stream`; // Adjust if needed
 
+// Helper function to show/hide the error message div
+function displayError(message) {
+    if (message) {
+        errorDiv.textContent = message;
+        errorDiv.classList.add('visible'); // Add class to make it visible
+    } else {
+        errorDiv.textContent = '';
+        errorDiv.classList.remove('visible'); // Remove class to hide it
+    }
+}
+
 function connectWebSocket() {
     wsStatusDiv.textContent = 'Connecting...';
-    errorDiv.textContent = ''; // Clear previous errors
+    displayError(''); // Clear previous errors
     socket = new WebSocket(wsUrl);
 
     socket.onopen = function(event) {
         console.log("WebSocket connection opened");
         wsStatusDiv.textContent = 'Connected';
-        errorDiv.textContent = ''; // Clear error message on successful connection
+        displayError(''); // Clear error message on successful connection
     };
 
     socket.onmessage = function(event) {
@@ -33,14 +44,14 @@ function connectWebSocket() {
             updateUI(data);
         } catch (e) {
             console.error("Failed to parse WebSocket message:", e);
-            errorDiv.textContent = 'Error processing server update.';
+            displayError('Error processing server update.');
         }
     };
 
     socket.onerror = function(event) {
         console.error("WebSocket error observed:", event);
         wsStatusDiv.textContent = 'Connection Error!';
-        errorDiv.textContent = 'WebSocket connection error. Check server status.';
+        displayError('WebSocket connection error. Check server status.');
         // Optional: Attempt to reconnect after a delay
         // setTimeout(connectWebSocket, 5000);
     };
@@ -206,12 +217,12 @@ function updateSetpoints() {
     if (co2Setpoint !== '') setpoints.co2 = parseFloat(co2Setpoint);
 
     if (Object.keys(setpoints).length === 0) {
-        errorDiv.textContent = 'No setpoint values entered.';
+        displayError('No setpoint values entered.');
         return;
     }
 
     console.log("Sending setpoints:", setpoints);
-    errorDiv.textContent = ''; // Clear previous errors
+    displayError(''); // Clear previous errors
 
     fetch('/setpoints', {
         method: 'PUT',
@@ -224,7 +235,7 @@ function updateSetpoints() {
     .then(data => {
         console.log('Setpoint update response:', data);
         if (!data.ok) {
-            errorDiv.textContent = `Error updating setpoints: ${data.error || 'Unknown error'}`;
+            displayError(`Error updating setpoints: ${data.error || 'Unknown error'}`);
         } else {
              // Optionally clear inputs or provide success message
              console.log("Setpoints updated successfully.");
@@ -232,7 +243,7 @@ function updateSetpoints() {
     })
     .catch((error) => {
         console.error('Error sending setpoints:', error);
-        errorDiv.textContent = 'Failed to send setpoints to server.';
+        displayError('Failed to send setpoints to server.');
     });
 }
 
