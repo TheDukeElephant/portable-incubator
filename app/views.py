@@ -4,7 +4,6 @@ import time
 import threading
 import atexit
 import io
-import os # Import os module
 from flask import Blueprint, render_template, request, jsonify, Response, make_response
 from . import sock # sock is initialized in __init__
 from .control.manager import ControlManager
@@ -95,14 +94,11 @@ def stop_background_loop():
     else:
         print("Asyncio loop not running or already stopped.")
 
-# --- Start background loop on app startup (only in main worker process) ---
-# Check WERKZEUG_RUN_MAIN to prevent starting twice when using Flask reloader
-if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-    start_background_loop()
+# --- Start background loop on app startup ---
+start_background_loop()
 
-# --- Register shutdown hook (only in main worker process) ---
-if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-    atexit.register(stop_background_loop)
+# --- Register shutdown hook ---
+atexit.register(stop_background_loop)
 
 
 # ------------- HTTP endpoints --------------------
