@@ -15,6 +15,7 @@ from .temperature import TemperatureLoop
 from .humidity import HumidityLoop
 from .o2 import O2Loop
 from .co2 import CO2Loop # Import the new control loop
+from .air_pump import AirPumpControlLoop # Import the air pump loop
 
 # Data Logger Import
 from ..datalogger import DataLogger
@@ -104,6 +105,12 @@ class ControlManager:
             sensor=self.co2_sensor,
             vent_relay_pin=CO2_VENT_PIN,
             setpoint=DEFAULT_CO2_SETPOINT
+        )
+        self.air_pump_loop = AirPumpControlLoop(
+            # No specific HAL needed here, it manages its own motor driver
+            # Pass manager for consistency, though not currently used by AirPumpControlLoop
+            # manager=self, # BaseLoop doesn't require manager, AirPump doesn't use it yet
+            interval_sec=1.0 # Check pump state every second
         )
 
         # 3. Initialize Data Logger
@@ -205,6 +212,8 @@ class ControlManager:
                     'humidifier_on': status.get('humidifier_on'),
                     'argon_valve_on': status.get('argon_valve_on'),
                     'vent_active': status.get('vent_active'),
+                    'air_pump_on': status.get('air_pump_on'), # Add air pump status
+                    'air_pump_speed': status.get('air_pump_speed'), # Add air pump speed
                 }
                 await self.logger.log_data(log_data)
                 # print("Logged data point.") # Debugging
@@ -242,6 +251,7 @@ class ControlManager:
                 asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
                 asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
                 asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
                 asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
             ]
             # Incubator starts in the 'stopped' state (actuators off)
@@ -272,6 +282,7 @@ class ControlManager:
         await self.humidity_loop.stop()
         await self.o2_loop.stop()
         await self.co2_loop.stop()
+        await self.air_pump_loop.stop() # Stop the air pump loop
 
         # Cancel all running tasks gracefully (includes logger)
         tasks_to_cancel = list(self._running_tasks)
@@ -341,6 +352,8 @@ class ControlManager:
         self.argon_valve_relay.off()
         if self.co2_loop.vent_relay:
             self.co2_loop.vent_relay.off()
+        if self.air_pump_loop and self.air_pump_loop.motor:
+            self.air_pump_loop.motor.stop() # Explicitly stop the pump motor
         # Loops will continue running but won't activate relays while flag is False
 
 
@@ -351,6 +364,7 @@ class ControlManager:
         hum_status = self.humidity_loop.get_status()
         o2_status = self.o2_loop.get_status()
         co2_status = self.co2_loop.get_status()
+        air_pump_status = self.air_pump_loop.get_status() if hasattr(self, 'air_pump_loop') else {} # Get air pump status safely
 
         status = {
             "timestamp": time.time(),
@@ -367,6 +381,8 @@ class ControlManager:
             "co2_ppm": co2_status.get("co2_ppm"),
             "co2_setpoint_ppm": co2_status.get("setpoint_ppm"),
             "vent_active": co2_status.get("vent_active"), # This now reflects incubator_running via loop's property
+            "air_pump_on": air_pump_status.get("pump_on", False), # Add air pump status
+            "air_pump_speed": air_pump_status.get("speed_percent", 0), # Add air pump speed
         }
         return status
 
