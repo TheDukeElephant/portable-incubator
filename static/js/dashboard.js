@@ -1,5 +1,6 @@
 const wsStatusDiv = document.getElementById('ws-status');
 const errorDiv = document.getElementById('error-message');
+const incubatorToggleButton = document.getElementById('incubator-toggle-button'); // Added button reference
 const MAX_DATA_POINTS = 50; // Approx 50 seconds if data comes every second
 
 // Chart instances and data storage
@@ -185,6 +186,20 @@ function updateUI(data) {
         co2Input.value = data.co2_setpoint_ppm.toFixed(0);
     }
     updateChartData('co2', data.co2_ppm); // Update chart data
+
+    // Update Incubator State Button
+    if (incubatorToggleButton) {
+        if (data.incubator_running === true) {
+            incubatorToggleButton.textContent = 'Stop Incubator';
+            incubatorToggleButton.className = 'toggle-button button-on';
+        } else if (data.incubator_running === false) {
+            incubatorToggleButton.textContent = 'Start Incubator';
+            incubatorToggleButton.className = 'toggle-button button-off';
+        }
+        // If incubator_running is null/undefined, don't change the button
+    }
+
+
     // Update charts
     if (tempChart) tempChart.update();
     if (humChart) humChart.update();
@@ -247,10 +262,40 @@ function updateSetpoints() {
     });
 }
 
-// --- Initial Connection ---
-// --- Initial Connection & Chart Setup ---
+// --- Incubator State Toggle Function ---
+function toggleIncubatorState() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        displayError('WebSocket is not connected. Cannot change incubator state.');
+        return;
+    }
+
+    // Determine the *intended* state based on the current button class
+    const isCurrentlyOff = incubatorToggleButton.classList.contains('button-off');
+    const intendedState = isCurrentlyOff ? 'running' : 'stopped';
+
+    console.log(`Requesting incubator state change to: ${intendedState}`);
+    displayError(''); // Clear previous errors
+
+    const message = {
+        command: 'set_incubator_state',
+        state: intendedState
+    };
+    socket.send(JSON.stringify(message));
+
+    // Note: Button appearance is updated in updateUI based on confirmation from backend
+}
+
+
+// --- Initial Connection & Event Listeners ---
 initCharts(); // Initialize charts on page load
 connectWebSocket();
+// Add event listener for the toggle button
+if (incubatorToggleButton) {
+    incubatorToggleButton.addEventListener('click', toggleIncubatorState);
+} else {
+    console.error("Incubator toggle button not found!");
+}
+
 // --- Log Download Function ---
 function downloadLogWithDuration() {
     const durationSelect = document.getElementById('log-duration-select');

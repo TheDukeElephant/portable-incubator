@@ -193,18 +193,63 @@ def download_log():
 def stream(ws):
     """WebSocket endpoint to stream incubator status updates."""
     print("WebSocket client connected.")
-    try:
-        while True:
-            # Fetch current status from the manager
-            current_status = manager.get_status()
-            try:
-                ws.send(json.dumps(current_status))
-            except Exception as e: # Catch errors if client disconnects abruptly
-                 print(f"WebSocket send error: {e}. Client likely disconnected.")
-                 break # Exit loop if send fails
+    client_active = True
+    last_send_time = 0
+    send_interval = 1.0 # Send status every 1 second
 
-            # Send updates roughly every second
-            time.sleep(1)
+    try:
+        while client_active:
+            # --- Receive Messages (with timeout) ---
+            try:
+                # Use a timeout to avoid blocking indefinitely, allowing status sends
+                message_str = ws.receive(timeout=0.1) # Timeout after 100ms
+                if message_str:
+                    print(f"Received WebSocket message: {message_str}")
+                    try:
+                        message = json.loads(message_str)
+                        if message.get('command') == 'set_incubator_state':
+                            state = message.get('state')
+                            if state == 'running':
+                                print("Received request to START incubator.")
+                                # Call manager method (to be implemented)
+                                asyncio.run_coroutine_threadsafe(manager.start_incubator(), _async_loop)
+                            elif state == 'stopped':
+                                print("Received request to STOP incubator.")
+                                # Call manager method (to be implemented)
+                                asyncio.run_coroutine_threadsafe(manager.stop_incubator(), _async_loop)
+                            else:
+                                print(f"Invalid state received: {state}")
+                        else:
+                            print(f"Unknown command received: {message.get('command')}")
+                    except json.JSONDecodeError:
+                        print(f"Error decoding JSON message: {message_str}")
+                    except Exception as e:
+                         print(f"Error processing WebSocket message: {e}")
+
+            except TimeoutError:
+                # Timeout is expected, just means no message received
+                pass
+            except Exception as e:
+                 print(f"WebSocket receive error: {e}. Client likely disconnected.")
+                 client_active = False # Exit loop on receive error
+                 break
+
+            # --- Send Status Updates Periodically ---
+            current_time = time.time()
+            if current_time - last_send_time >= send_interval:
+                # Fetch current status from the manager
+                current_status = manager.get_status()
+                try:
+                    ws.send(json.dumps(current_status))
+                    last_send_time = current_time
+                except Exception as e: # Catch errors if client disconnects abruptly
+                     print(f"WebSocket send error: {e}. Client likely disconnected.")
+                     client_active = False # Exit loop on send error
+                     break
+
+            # Small sleep to prevent busy-waiting when no messages and not time to send
+            time.sleep(0.05)
+
     except Exception as e:
          print(f"Error in WebSocket handler: {e}")
     finally:

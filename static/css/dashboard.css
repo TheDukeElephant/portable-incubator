@@ -245,3 +245,38 @@ h1 {
 .log-button:hover {
     background-color: #3abfa0; /* Darker teal on hover */
 }
+/* --- Incubator Controls --- */
+.incubator-controls {
+    text-align: center; /* Center the button */
+    margin-bottom: 20px; /* Add space below the button */
+}
+
+.toggle-button {
+    padding: 12px 25px;
+    font-size: 1.1em;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    font-family: var(--font-family);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    min-width: 180px; /* Ensure minimum width */
+}
+
+.button-on {
+    background-color: var(--success-color);
+    color: var(--bg-color); /* Dark text on light green */
+}
+
+.button-on:hover {
+    background-color: #58e8a8; /* Slightly lighter green on hover */
+}
+
+.button-off {
+    background-color: var(--danger-color);
+    color: #fff; /* White text on red */
+}
+
+.button-off:hover {
+    background-color: #f85a5a; /* Slightly lighter red on hover */
+}

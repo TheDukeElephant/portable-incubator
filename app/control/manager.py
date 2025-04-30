@@ -54,7 +54,8 @@ class ControlManager:
         print("Initializing Control Manager...")
         self._db_path = db_path
         self._running_tasks: List[asyncio.Task] = []
-        self._is_running = False
+        self._manager_active = False # Is the manager itself initialized and ready?
+        self.incubator_running = False # Are the control loops actively running?
 
         # 1. Initialize HAL Components
         print("  Initializing HAL components...")
@@ -105,131 +106,196 @@ class ControlManager:
         print("Control Manager Initialized.")
 
     async def _logging_task(self):
-        """Background task to periodically log data."""
-        print("Data logging task started.")
-        while self._is_running:
+        """Background task to periodically log data when the incubator is running."""
+        print("Data logging task started (will log when incubator is running).")
+        while self._manager_active: # Keep task alive while manager is active
             try:
-                await asyncio.sleep(LOGGING_INTERVAL)
-                if not self._is_running: break # Exit if stopped during sleep
+                # Wait until the incubator is running before trying to log
+                while not self.incubator_running and self._manager_active:
+                    await asyncio.sleep(1) # Check every second if incubator started
+                if not self._manager_active: break # Exit if manager stopped while waiting
 
-                status = self.get_status()
-                log_data = {
-                    'temperature': status.get('temperature'),
-                    'humidity': status.get('humidity'),
-                    'o2': status.get('o2'),
-                    'co2': status.get('co2_ppm'), # Get from CO2 loop status
-                    'temp_setpoint': status.get('temp_setpoint'),
-                    'humidity_setpoint': status.get('humidity_setpoint'),
-                    'o2_setpoint': status.get('o2_setpoint'),
-                    'co2_setpoint': status.get('co2_setpoint_ppm') # Get from CO2 loop status
-                }
-                await self.logger.log_data(log_data)
-                # print("Logged data point.") # Debugging
+                # --- Incubator is running, start logging interval ---
+                start_log_time = time.monotonic()
+                while self.incubator_running and self._manager_active:
+                    status = self.get_status()
+                    log_data = {
+                        'temperature': status.get('temperature'),
+                        'humidity': status.get('humidity'),
+                        'o2': status.get('o2'),
+                        'co2': status.get('co2_ppm'),
+                        'temp_setpoint': status.get('temp_setpoint'),
+                        'humidity_setpoint': status.get('humidity_setpoint'),
+                        'o2_setpoint': status.get('o2_setpoint'),
+                        'co2_setpoint': status.get('co2_setpoint_ppm')
+                    }
+                    await self.logger.log_data(log_data)
+                    # print("Logged data point.") # Debugging
+
+                    # Calculate remaining sleep time for the interval
+                    elapsed = time.monotonic() - start_log_time
+                    sleep_duration = max(0, LOGGING_INTERVAL - elapsed % LOGGING_INTERVAL)
+                    await asyncio.sleep(sleep_duration)
+                    # No need to reset start_log_time here, the modulo handles the interval
+
+                # If incubator stopped, loop back to the outer waiting loop
+                if not self.incubator_running:
+                    print("Incubator stopped, pausing logging.")
+                    # The inner while loop condition (self.incubator_running) will become false,
+                    # causing it to break and return to the outer while loop's check.
+
             except asyncio.CancelledError:
                 print("Logging task cancelled.")
-                break
+                break # Exit the outer while self._manager_active loop
             except Exception as e:
                 print(f"Error in logging task: {e}")
-                # Avoid crashing the logger task, wait and retry
-                await asyncio.sleep(LOGGING_INTERVAL / 2)
+                # Avoid crashing the logger task, wait and retry if manager still active
+                if self._manager_active:
+                    await asyncio.sleep(LOGGING_INTERVAL / 2) # Wait before retrying the outer loop
+
         print("Data logging task stopped.")
 
 
     async def start(self):
-        """Initializes the logger and starts all control loops and logging task."""
-        if self._is_running:
-            print("Control Manager already running.")
+        """Initializes the logger and prepares the manager, but doesn't start loops."""
+        if self._manager_active:
+            print("Control Manager already initialized.")
             return
 
-        print("Starting Control Manager...")
+        print("Initializing Control Manager...")
         try:
             # Initialize logger database connection
             await self.logger.initialize()
-
-            self._is_running = True
-            self._running_tasks = [
-                asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
-                asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
-                asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
-                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"), # Add CO2 loop task
-                asyncio.create_task(self._logging_task(), name="LoggerTask")
-            ]
-            print(f"Control Manager started with {len(self._running_tasks)} tasks.")
+            self._manager_active = True
+            print("Control Manager Initialized and ready.")
+            # Start the logging task container, it will wait for incubator_running
+            log_task = asyncio.create_task(self._logging_task(), name="LoggerTask")
+            # We don't store it in self._running_tasks as it's managed differently now
+            # Let it run until the manager itself stops.
 
         except Exception as e:
-            print(f"Error starting Control Manager: {e}")
-            self._is_running = False
-            # Attempt cleanup if start failed partially
-            await self.stop()
+            print(f"Error initializing Control Manager: {e}")
+            self._manager_active = False
+            await self.logger.close() # Ensure logger is closed if init failed
             raise # Re-raise the exception
 
     async def stop(self):
-        """Stops all control loops, the logging task, and closes resources."""
-        if not self._is_running and not self._running_tasks:
-            print("Control Manager already stopped.")
+        """Stops incubator loops (if running), cleans up HAL, and closes logger."""
+        if not self._manager_active:
+            print("Control Manager already stopped or not initialized.")
             return
 
         print("Stopping Control Manager...")
-        self._is_running = False # Signal loops and logger to stop
+        # 1. Stop incubator loops if they are running
+        await self.stop_incubator()
 
-        # Stop control loops first
-        self.temp_loop.stop()
-        self.humidity_loop.stop()
-        self.o2_loop.stop()
-        self.co2_loop.stop() # Stop the CO2 loop
+        # 2. Signal the manager is stopping (will stop logger task loop)
+        self._manager_active = False
 
-        # Cancel all running tasks gracefully
-        for task in self._running_tasks:
-            if not task.done():
-                task.cancel()
-
-        # Wait for tasks to finish cancellation
-        if self._running_tasks:
-            try:
-                await asyncio.gather(*self._running_tasks, return_exceptions=True)
-                print("All tasks finished or cancelled.")
-            except asyncio.CancelledError:
-                 print("Gather cancelled (expected during shutdown).")
-            except Exception as e:
-                 print(f"Error during task gathering on stop: {e}")
-
-
-        self._running_tasks = []
-
-        # Close HAL components (important for GPIO cleanup)
+        # 3. Clean up HAL components
         print("Closing HAL components...")
         self.heater_relay.close()
         self.humidifier_relay.close()
         self.argon_valve_relay.close()
-        # self.co2_valve_relay.close() # Removed
-        if self.co2_loop.vent_relay: # Close vent relay if initialized
+        if self.co2_loop.vent_relay:
              self.co2_loop.vent_relay.close()
         self.o2_sensor.close()
-        # self.dht_sensor doesn't have an explicit close method in the example
-        # self.co2_sensor doesn't have a close method in the dummy implementation
+        # DHT sensor and dummy CO2 sensor don't have close methods
 
-        # Close logger connection
+        # 4. Close logger connection
         await self.logger.close()
 
-        print("Control Manager stopped.")
+        print("Control Manager fully stopped.")
+
+
+    async def start_incubator(self):
+        """Starts the actual control loops and logging."""
+        if self.incubator_running:
+            print("Incubator loops already running.")
+            return
+        if not self._manager_active:
+            print("Cannot start incubator loops: Manager not initialized.")
+            return
+
+        print("Starting Incubator Control Loops...")
+        try:
+            self.incubator_running = True
+            self._running_tasks = [
+                asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
+                asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
+                asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                # Logging task is already running, waiting for incubator_running flag
+            ]
+            print(f"Incubator started with {len(self._running_tasks)} control tasks.")
+        except Exception as e:
+            print(f"Error starting incubator loops: {e}")
+            self.incubator_running = False
+            await self.stop_incubator() # Attempt cleanup if start failed partially
+
+
+    async def stop_incubator(self):
+        """Stops the control loops."""
+        if not self.incubator_running:
+            # print("Incubator loops already stopped.") # Can be noisy, optional
+            return
+
+        print("Stopping Incubator Control Loops...")
+        self.incubator_running = False # Signal loops and logger to stop/pause
+
+        # Stop control loops first (signals them internally)
+        self.temp_loop.stop()
+        self.humidity_loop.stop()
+        self.o2_loop.stop()
+        self.co2_loop.stop()
+
+        # Cancel all running tasks gracefully
+        tasks_to_cancel = list(self._running_tasks) # Copy list before clearing
+        self._running_tasks = [] # Clear the list
+
+        for task in tasks_to_cancel:
+            if task and not task.done():
+                task.cancel()
+
+        # Wait for tasks to finish cancellation
+        if tasks_to_cancel:
+            try:
+                await asyncio.gather(*[t for t in tasks_to_cancel if t], return_exceptions=True)
+                print("All control tasks finished or cancelled.")
+            except asyncio.CancelledError:
+                 print("Gather cancelled (expected during shutdown).")
+            except Exception as e:
+                 print(f"Error during task gathering on stop_incubator: {e}")
+
+        # Ensure relays are off when stopping loops explicitly
+        print("Ensuring actuators are off...")
+        self.heater_relay.off()
+        self.humidifier_relay.off()
+        self.argon_valve_relay.off()
+        if self.co2_loop.vent_relay:
+            self.co2_loop.vent_relay.off()
+
+        print("Incubator Control Loops stopped.")
+
 
     def get_status(self) -> Dict[str, Any]:
         """Returns the current status of all sensors and control loops."""
         status = {
             "timestamp": time.time(),
+            "incubator_running": self.incubator_running, # Add overall state
             "temperature": self.temp_loop.current_temperature,
             "temp_setpoint": self.temp_loop.setpoint,
-            "heater_on": self.temp_loop.heater_is_on,
+            "heater_on": self.temp_loop.heater_is_on if self.incubator_running else False,
             "humidity": self.humidity_loop.current_humidity,
             "humidity_setpoint": self.humidity_loop.setpoint,
-            "humidifier_on": self.humidity_loop.humidifier_is_on,
+            "humidifier_on": self.humidity_loop.humidifier_is_on if self.incubator_running else False,
             "o2": self.o2_loop.current_o2,
             "o2_setpoint": self.o2_loop.setpoint,
-            "argon_valve_on": self.o2_loop.argon_valve_is_on,
+            "argon_valve_on": self.o2_loop.argon_valve_is_on if self.incubator_running else False,
             # Get CO2 status from the loop
             "co2_ppm": self.co2_loop.current_co2,
             "co2_setpoint_ppm": self.co2_loop.setpoint,
-            "vent_active": self.co2_loop.vent_active,
+            "vent_active": self.co2_loop.vent_active if self.incubator_running else False,
         }
         return status
 
@@ -269,18 +335,24 @@ class ControlManager:
 # async def main():
 #     manager = ControlManager()
 #     try:
-#         await manager.start()
-#         print("Manager started. Running for 20 seconds...")
+#         await manager.start() # This now just initializes
+#         print("Manager initialized. Starting incubator...")
+#         await manager.start_incubator() # Explicitly start loops
+#         print("Incubator running for 10 seconds...")
 #         await asyncio.sleep(10)
 #         print("Current Status:", manager.get_status())
-#         manager.update_setpoints({'temperature': 36.5, 'humidity': 58.0, 'o2': 6.0})
+#         manager.update_setpoints({'temperature': 36.5, 'humidity': 58.0, 'o2': 6.0, 'co2': 950.0})
 #         await asyncio.sleep(10)
 #         print("Current Status:", manager.get_status())
+#         print("Stopping incubator...")
+#         await manager.stop_ incubator() # Explicitly stop loops
+#         await asyncio.sleep(2) # Give time to see it stopped
+#         print("Current Status (after stop):", manager.get_status())
 #
 #     except Exception as e:
 #         print(f"Error during manager example: {e}")
 #     finally:
-#         await manager.stop()
+#         await manager.stop() # This stops manager and cleans up everything
 #         print("Manager example finished.")
 #
 # if __name__ == '__main__':
