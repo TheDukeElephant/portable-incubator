@@ -1,5 +1,7 @@
 import asyncio
 import time
+import json
+import os
 from typing import Dict, Any, Optional, List
 
 # Hardware Abstraction Layer Imports
@@ -37,6 +39,8 @@ DEFAULT_TEMP_SETPOINT = 37.0
 DEFAULT_HUMIDITY_SETPOINT = 60.0
 DEFAULT_O2_SETPOINT = 5.0
 DEFAULT_CO2_SETPOINT = 1000.0
+
+STATE_FILE_PATH = "app/state.json"
 
 # PID / Hysteresis Parameters
 TEMP_PID_P = 5.0
@@ -107,6 +111,77 @@ class ControlManager:
         self.logger = DataLogger(db_path=self._db_path)
 
         print("Control Manager Initialized (Loops not started yet).")
+
+        # Load initial state from file
+        self._load_state()
+
+
+    def _save_state(self):
+        """Saves the current setpoints and running state to a JSON file."""
+        state = {
+            'temp_setpoint': self.temp_loop.setpoint,
+            'humidity_setpoint': self.humidity_loop.setpoint,
+            'o2_setpoint': self.o2_loop.setpoint,
+            'co2_setpoint': self.co2_loop.setpoint,
+            'incubator_running': self.incubator_running,
+        }
+        try:
+            with open(STATE_FILE_PATH, 'w') as f:
+                json.dump(state, f, indent=4)
+            # print(f"Saved state: {state}") # Debugging
+        except IOError as e:
+            print(f"Error saving state to {STATE_FILE_PATH}: {e}")
+        except Exception as e:
+            print(f"Unexpected error saving state: {e}")
+
+    def _load_state(self):
+        """Loads setpoints and running state from JSON file if it exists."""
+        if not os.path.exists(STATE_FILE_PATH):
+            print(f"State file {STATE_FILE_PATH} not found. Using default values.")
+            # Ensure initial save reflects defaults if file doesn't exist
+            self._save_state()
+            return
+
+        try:
+            with open(STATE_FILE_PATH, 'r') as f:
+                state = json.load(f)
+
+            print(f"Loading state from {STATE_FILE_PATH}: {state}")
+
+            # Apply loaded state only if keys exist and values are reasonable (basic check)
+            if isinstance(state, dict):
+                if 'temp_setpoint' in state and isinstance(state['temp_setpoint'], (int, float)):
+                    self.temp_loop.setpoint = float(state['temp_setpoint'])
+                if 'humidity_setpoint' in state and isinstance(state['humidity_setpoint'], (int, float)):
+                    self.humidity_loop.setpoint = float(state['humidity_setpoint'])
+                if 'o2_setpoint' in state and isinstance(state['o2_setpoint'], (int, float)):
+                    self.o2_loop.setpoint = float(state['o2_setpoint'])
+                if 'co2_setpoint' in state and isinstance(state['co2_setpoint'], (int, float)):
+                    self.co2_loop.setpoint = float(state['co2_setpoint'])
+                if 'incubator_running' in state and isinstance(state['incubator_running'], bool):
+                     # Set the initial running state based on loaded value.
+                     # The start() method will respect this initial state.
+                     # Note: start() currently forces incubator_running=False initially,
+                     # this loaded value might be overridden unless start() logic is adjusted.
+                     # For now, we load it, but start() behavior takes precedence on initial startup.
+                     # A better approach might be to pass this loaded state to start().
+                     # Let's keep it simple for now and load it here. The user can then start it.
+                     self.incubator_running = state['incubator_running']
+                print("Successfully applied loaded state.")
+            else:
+                 print(f"Invalid state format in {STATE_FILE_PATH}. Using default values.")
+                 # Save defaults if file was invalid
+                 self._save_state()
+
+        except (IOError, json.JSONDecodeError) as e:
+            print(f"Error loading state from {STATE_FILE_PATH}: {e}. Using default values.")
+            # Save defaults if file was corrupted
+            self._save_state()
+        except Exception as e:
+            print(f"Unexpected error loading state: {e}. Using default values.")
+            # Save defaults on unexpected error
+            self._save_state()
+
 
     async def _logging_task(self):
         """Background task to periodically log data when the incubator is running."""
@@ -244,7 +319,7 @@ class ControlManager:
         print("Starting Incubator (enabling actuators)...")
         self.incubator_running = True
         # Loops are already running, just changing the flag enables control
-
+        self._save_state() # Save state after change
 
     async def stop_incubator(self):
         """Disallows actuators from running, turning them off."""
@@ -257,6 +332,7 @@ class ControlManager:
 
         print("Stopping Incubator (disabling actuators)...")
         self.incubator_running = False
+        self._save_state() # Save state after change
 
         # Explicitly turn off all actuators immediately
         print("Ensuring actuators are off...")
@@ -307,11 +383,14 @@ class ControlManager:
             if 'o2' in setpoints:
                 self.o2_loop.setpoint = float(setpoints['o2'])
             if 'co2' in setpoints:
-                 self.co2_loop.setpoint = float(setpoints['co2'])
+                self.co2_loop.setpoint = float(setpoints['co2'])
         except ValueError as e:
-             print(f"Error updating setpoints: Invalid value type - {e}")
+            print(f"Error updating setpoints: Invalid value type - {e}")
         except Exception as e:
-             print(f"Unexpected error updating setpoints: {e}")
+            print(f"Unexpected error updating setpoints: {e}")
+        finally:
+            # Save state regardless of errors in applying specific values
+            self._save_state()
 
     async def __aenter__(self):
         """Allows using 'async with ControlManager(...)' syntax."""
