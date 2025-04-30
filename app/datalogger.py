@@ -177,7 +177,7 @@ class DataLogger:
                 # Assuming row[0] is the timestamp
                 dt_object = datetime.datetime.fromtimestamp(row[0], tz=datetime.timezone.utc)
                 formatted_timestamp = dt_object.isoformat()
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OSError): # Added OSError
                 formatted_timestamp = "Invalid Timestamp" # Handle potential errors
 
             # Create a new list/tuple with the formatted timestamp
