@@ -123,7 +123,7 @@ function initCharts() {
     co2Chart = new Chart(document.getElementById('co2-chart').getContext('2d'), {
         type: 'line',
         data: { labels: chartData.co2.labels, datasets: [{ data: chartData.co2.values, borderColor: '#C77DFF', tension: 0.1, pointRadius: 0 }] },
-        options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: 'ppm' } } } }
+        options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: '%' } } } }
     });
 }
 
@@ -178,7 +178,9 @@ function updateUI(data) {
     updateChartData('o2', data.o2); // Update chart data
 
     // CO2
-    document.getElementById('co2-current').textContent = data.co2_ppm !== null ? data.co2_ppm.toFixed(0) : '--';
+    const co2_ppm = data.co2_ppm;
+    const co2_percentage = co2_ppm !== null ? (co2_ppm / 10000).toFixed(2) : null;
+    document.getElementById('co2-current').textContent = co2_percentage !== null ? `${co2_percentage}%` : '--';
     document.getElementById('co2-setpoint-display').textContent = data.co2_setpoint_ppm !== null ? data.co2_setpoint_ppm.toFixed(0) : '--';
     updateRelayStatus('vent-status', data.vent_active, 'Vent');
     const co2Input = document.getElementById('co2-setpoint-input');
