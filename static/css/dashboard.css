@@ -263,7 +263,7 @@ h1 {
     min-width: 180px; /* Ensure minimum width */
 }
 
-.button-of {
+.button-off {
     background-color: var(--success-color);
     color: var(--bg-color); /* Dark text on light green */
 }
