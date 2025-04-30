@@ -134,3 +134,8 @@ cython_debug/
 
 # VSCode settings
 .vscode/
+
+# runtime databases & logs
+incubator_log.db
+data/
+logs/
