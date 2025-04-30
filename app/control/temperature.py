@@ -4,6 +4,10 @@ from simple_pid import PID
 from ..hal.dht_sensor import DHT22Sensor
 from ..hal.relay_output import RelayOutput
 from .base_loop import BaseLoop # Import BaseLoop
+# Forward declaration for type hinting
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .manager import ControlManager
 
 class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     """
@@ -11,6 +15,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     Reads temperature from a DHT22 sensor and controls a heater relay.
     """
     def __init__(self,
+                 manager: 'ControlManager', # Add manager argument
                  temp_sensor: DHT22Sensor,
                  heater_relay: RelayOutput,
                  p: float = 5.0,
@@ -24,6 +29,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         Initializes the temperature control loop.
 
         Args:
+            manager: The ControlManager instance.
             temp_sensor: Instance of DHT22Sensor.
             heater_relay: Instance of RelayOutput for the heater.
             p: Proportional gain for PID.
@@ -33,8 +39,8 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
             sample_time: How often the control loop runs (seconds).
             output_threshold: The PID output value above which the heater turns on.
         """
-        # Call BaseLoop constructor with the sample_time as control_interval
-        super().__init__(control_interval=sample_time)
+        # Call BaseLoop constructor, passing the manager and interval
+        super().__init__(manager=manager, control_interval=sample_time)
 
         self.temp_sensor = temp_sensor
         self.heater_relay = heater_relay
@@ -73,12 +79,25 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         if self._current_temperature is None:
             # Safety measure: If we don't know the temperature, turn the heater off.
             print("Safety: Turning heater OFF due to unknown temperature.")
-            self.heater_relay.off()
-            self._heater_on = False
+            if self._heater_on:  # Check if it was on
+                self.heater_relay.off()
+                self._heater_on = False
             # Reset PID to prevent windup when sensor recovers
             self.pid.reset()
             return
 
+        # --- Check if incubator is running ---
+        if not self.manager.incubator_running:
+            # If stopped, ensure heater is off and skip PID calculation
+            if self._heater_on:
+                self.heater_relay.off()
+                self._heater_on = False
+                print("Incubator stopped: Turning heater OFF.")
+            # Reset PID to prevent windup while stopped
+            self.pid.reset()
+            return
+
+        # --- Incubator is running, proceed with control ---
         # Calculate PID output
         pid_output = self.pid(self._current_temperature)
 
@@ -107,7 +126,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         """Stops the loop and ensures the heater is turned off."""
         # Call BaseLoop's stop first
         await super().stop()
-        # Ensure heater is off as a final step
+        # Ensure heater is off as a final step when the loop itself is stopped
         if self.heater_relay and self._heater_on:
              print("TemperatureLoop stopping: Turning heater OFF.")
              self.heater_relay.off()
@@ -140,14 +159,15 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     @property
     def heater_is_on(self) -> bool:
         """Returns True if the heater relay is currently commanded ON."""
-        return self._heater_on
+        # Reflect the actual state based on incubator running status as well
+        return self._heater_on and self.manager.incubator_running
 
     def get_status(self) -> dict:
         """Returns the current status of the temperature loop."""
         return {
             "temperature": self.current_temperature,
             "setpoint": self.setpoint,
-            "heater_on": self.heater_is_on,
+            "heater_on": self.heater_is_on, # Use property which checks incubator_running
             "pid_p": self.pid.Kp,
             "pid_i": self.pid.Ki,
             "pid_d": self.pid.Kd,
@@ -162,22 +182,31 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 # async def main():
 #     from ..hal.relay_output import RelayOutput
 #     from ..hal.dht_sensor import DHT22Sensor
+#     # Need a dummy manager for example
+#     class DummyManager: incubator_running = True
+#     manager = DummyManager()
 #     DHT_PIN = 4
 #     HEATER_PIN = 17
 #
 #     sensor = DHT22Sensor(DHT_PIN)
 #     relay = RelayOutput(HEATER_PIN)
 #
-#     loop = TemperatureLoop(temp_sensor=sensor, heater_relay=relay, setpoint=30.0, sample_time=2)
+#     loop = TemperatureLoop(manager=manager, temp_sensor=sensor, heater_relay=relay, setpoint=30.0, sample_time=2)
 #
 #     run_task = asyncio.create_task(loop.run())
 #
 #     # Simulate running for a while
 #     await asyncio.sleep(10)
-#     loop.update_setpoint(32.0)
-#     await asyncio.sleep(10)
+#     loop.setpoint = 32.0
+#     await asyncio.sleep(5)
+#     print("Simulating incubator stop...")
+#     manager.incubator_running = False # Stop the incubator
+#     await asyncio.sleep(5) # See if heater turns off
+#     print("Simulating incubator start...")
+#     manager.incubator_running = True # Start again
+#     await asyncio.sleep(5)
 #
-#     loop.stop()
+#     await loop.stop() # Stop the loop task itself
 #     await run_task # Wait for loop to finish cleanly
 #     relay.close() # Explicitly close relay if needed
 #

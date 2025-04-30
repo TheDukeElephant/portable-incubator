@@ -3,6 +3,10 @@ import time
 from ..hal.dht_sensor import DHT22Sensor
 from ..hal.relay_output import RelayOutput
 from .base_loop import BaseLoop # Import BaseLoop
+# Forward declaration for type hinting
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .manager import ControlManager
 
 class HumidityLoop(BaseLoop): # Inherit from BaseLoop
     """
@@ -10,6 +14,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
     Reads humidity from a DHT22 sensor and controls a humidifier relay.
     """
     def __init__(self,
+                 manager: 'ControlManager', # Add manager argument
                  humidity_sensor: DHT22Sensor,
                  humidifier_relay: RelayOutput,
                  setpoint: float = 60.0, # Target humidity %
@@ -20,6 +25,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
         Initializes the humidity control loop.
 
         Args:
+            manager: The ControlManager instance.
             humidity_sensor: Instance of DHT22Sensor.
             humidifier_relay: Instance of RelayOutput for the humidifier.
             setpoint: Initial target humidity percentage.
@@ -30,8 +36,8 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
         if hysteresis <= 0:
             raise ValueError("Hysteresis must be a positive value.")
 
-        # Call BaseLoop constructor with the sample_time as control_interval
-        super().__init__(control_interval=sample_time)
+        # Call BaseLoop constructor, passing the manager and interval
+        super().__init__(manager=manager, control_interval=sample_time) # Pass the manager instance
 
         self.humidity_sensor = humidity_sensor
         self.humidifier_relay = humidifier_relay
@@ -66,8 +72,10 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
             pass # Option 2: Keep last known value (use with caution)
 
 
-    async def control_step(self): # Rename _update_control to control_step
-        """Applies hysteresis logic and updates the humidifier relay state."""
+    async def control_step(self):
+        """Reads sensor, applies hysteresis logic, and updates the humidifier relay state."""
+        self._read_sensor() # Read sensor first
+
         if self._current_humidity is None:
             # Safety measure: If we don't know the humidity, turn the humidifier off.
             print("Safety: Turning humidifier OFF due to unknown humidity.")
@@ -75,6 +83,16 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
                  self.humidifier_relay.off()
                  self._humidifier_on = False
             return
+
+        # --- Check if incubator is running ---
+        if not self.manager.incubator_running:
+            # If stopped, ensure humidifier is off and skip logic
+            if self._humidifier_on:
+                self.humidifier_relay.off()
+                self._humidifier_on = False
+                print("Incubator stopped: Turning humidifier OFF.")
+            return
+        # --- Incubator is running, proceed with control ---
 
         # Hysteresis Logic
         new_humidifier_state = self._humidifier_on # Assume no change initially
@@ -139,24 +157,19 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
         """Returns the last read humidity."""
         return self._current_humidity
 
-    # Keep current_humidity property
-    @property
-    def current_humidity(self) -> float | None:
-        """Returns the last read humidity."""
-        return self._current_humidity
-
     # Keep humidifier_is_on property
     @property
     def humidifier_is_on(self) -> bool:
         """Returns True if the humidifier relay is currently commanded ON."""
-        return self._humidifier_on
+        # Reflect the actual state based on incubator running status as well
+        return self._humidifier_on and self.manager.incubator_running
 
     def get_status(self) -> dict:
         """Returns the current status of the humidity loop."""
         return {
             "humidity": self.current_humidity,
             "setpoint": self.setpoint,
-            "humidifier_on": self.humidifier_is_on,
+            "humidifier_on": self.humidifier_is_on, # Use property which checks incubator_running
             "hysteresis": self._hysteresis,
             "on_threshold": self._turn_on_threshold,
             "off_threshold": self._turn_off_threshold,
@@ -171,22 +184,31 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
 # async def main():
 #     from ..hal.relay_output import RelayOutput
 #     from ..hal.dht_sensor import DHT22Sensor
+#     # Need a dummy manager for example
+#     class DummyManager: incubator_running = True
+#     manager = DummyManager()
 #     DHT_PIN = 4
 #     HUMIDIFIER_PIN = 27
 #
 #     sensor = DHT22Sensor(DHT_PIN)
 #     relay = RelayOutput(HUMIDIFIER_PIN)
 #
-#     loop = HumidityLoop(humidity_sensor=sensor, humidifier_relay=relay, setpoint=55.0, hysteresis=5.0, sample_time=3)
+#     loop = HumidityLoop(manager=manager, humidity_sensor=sensor, humidifier_relay=relay, setpoint=55.0, hysteresis=5.0, sample_time=3)
 #
 #     run_task = asyncio.create_task(loop.run())
 #
 #     # Simulate running for a while
-#     await asyncio.sleep(15)
-#     loop.update_setpoint(60.0)
-#     await asyncio.sleep(15)
+#     await asyncio.sleep(10)
+#     loop.setpoint = 60.0
+#     await asyncio.sleep(5)
+#     print("Simulating incubator stop...")
+#     manager.incubator_running = False # Stop the incubator
+#     await asyncio.sleep(5) # See if humidifier turns off
+#     print("Simulating incubator start...")
+#     manager.incubator_running = True # Start again
+#     await asyncio.sleep(5)
 #
-#     loop.stop()
+#     await loop.stop() # Stop the loop task itself
 #     await run_task # Wait for loop to finish cleanly
 #     relay.close() # Explicitly close relay if needed
 #

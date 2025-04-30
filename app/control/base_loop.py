@@ -7,15 +7,21 @@ class BaseLoop(ABC):
     Abstract base class for asynchronous control loops.
     Provides common structure for running, stopping, and periodic execution.
     """
-    def __init__(self, control_interval: float):
+    def __init__(self, manager: 'ControlManager', control_interval: float):
         """
         Initializes the base loop.
 
         Args:
+            manager: The ControlManager instance.
             control_interval: The time in seconds between control steps.
         """
         if control_interval <= 0:
             raise ValueError("Control interval must be positive.")
+        # Import ControlManager locally to avoid circular import at module level
+        from .manager import ControlManager
+        if not isinstance(manager, ControlManager):
+             raise TypeError("Manager must be an instance of ControlManager")
+        self.manager = manager
         self.control_interval = control_interval
         self._is_running = False
         self._stop_event = asyncio.Event()

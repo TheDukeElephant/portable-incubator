@@ -3,6 +3,10 @@ import time
 from .base_loop import BaseLoop # Corrected import
 from ..hal.co2_sensor import CO2Sensor
 from ..hal.relay_output import RelayOutput
+# Forward declaration for type hinting
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .manager import ControlManager
 
 # --- Configuration ---
 DEFAULT_CO2_SETPOINT_PPM = 1000.0 # Target maximum CO2 level in ppm
@@ -10,7 +14,6 @@ CONTROL_INTERVAL_SECONDS = 15     # How often to check CO2 level
 # VENT_RELAY_PIN = 24            # GPIO pin will now be passed in __init__
 MIN_VENT_DURATION_SECONDS = 5     # Minimum time to keep vent open
 MAX_VENT_DURATION_SECONDS = 60    # Maximum time to keep vent open in one go
-
 class CO2Loop(BaseLoop):
     """
     Control loop for managing Carbon Dioxide (CO2) levels.
@@ -18,8 +21,12 @@ class CO2Loop(BaseLoop):
     Uses a dummy sensor and placeholder relay pin.
     TODO: Implement real sensor reading and relay control.
     """
-    def __init__(self, sensor: CO2Sensor, vent_relay_pin: int, setpoint: float = DEFAULT_CO2_SETPOINT_PPM):
-        super().__init__(control_interval=CONTROL_INTERVAL_SECONDS)
+    def __init__(self,
+                 manager: 'ControlManager', # Add manager argument
+                 sensor: CO2Sensor,
+                 vent_relay_pin: int,
+                 setpoint: float = DEFAULT_CO2_SETPOINT_PPM):
+        super().__init__(manager=manager, control_interval=CONTROL_INTERVAL_SECONDS) # Pass manager
         self.sensor = sensor
         self._setpoint = setpoint
         self.vent_relay_pin = vent_relay_pin
@@ -63,6 +70,17 @@ class CO2Loop(BaseLoop):
                 self.vent_active = False
                 self._vent_start_time = None
             return # Skip control logic if sensor read failed
+
+        # --- Check if incubator is running ---
+        if not self.manager.incubator_running:
+            # If stopped, ensure vent is off and skip logic
+            if self.vent_relay and self.vent_active:
+                self.vent_relay.off()
+                self.vent_active = False
+                self._vent_start_time = None
+                print("Incubator stopped: Turning vent OFF.")
+            return
+        # --- Incubator is running, proceed with control ---
 
         # 2. Control Logic (Simple Threshold)
         # TODO: Add hysteresis or more advanced control if needed
@@ -108,7 +126,8 @@ class CO2Loop(BaseLoop):
         return {
             "co2_ppm": self.current_co2,
             "setpoint_ppm": self._setpoint,
-            "vent_active": self.vent_active,
+            # Use property which checks incubator_running
+            "vent_active": self.is_vent_active,
             "control_interval_s": self.control_interval
         }
 
@@ -119,4 +138,10 @@ class CO2Loop(BaseLoop):
             print("CO2Loop stopping: Turning vent OFF.")
             self.vent_relay.off()
             self.vent_active = False
-        print("CO2Loop stopped.")
+        # No need to print stopped message, BaseLoop handles it.
+
+    # Add property for vent status that considers incubator state
+    @property
+    def is_vent_active(self) -> bool:
+        """Returns True if the vent relay is currently commanded ON and incubator is running."""
+        return self.vent_active and self.manager.incubator_running
