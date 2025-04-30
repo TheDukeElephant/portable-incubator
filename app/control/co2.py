@@ -57,11 +57,14 @@ class CO2Loop(BaseLoop):
 
     async def control_step(self):
         """Performs a single control step for CO2 management."""
-        # 1. Read Sensor
-        self.current_co2 = self.sensor.read() # Uses dummy value for now
-
-        if self.current_co2 is None:
-            print("Warning: Failed to read CO2 sensor.")
+        # 1. Read Sensor (using new async method)
+        try:
+            self.current_co2 = await self.sensor.read_ppm()
+            # Optional: Add a debug log here if needed
+            # print(f"CO2 Read: {self.current_co2} ppm")
+        except (RuntimeError, asyncio.TimeoutError, ValueError) as e:
+            print(f"Warning: Failed to read CO2 sensor: {e}") # Log the specific error
+            self.current_co2 = None # Ensure current_co2 is None on failure
             # Safety: Turn off vent if sensor fails? Or maintain last state?
             # For now, let's turn it off if the reading fails.
             if self.vent_relay and self.vent_active:
@@ -70,6 +73,19 @@ class CO2Loop(BaseLoop):
                 self.vent_active = False
                 self._vent_start_time = None
             return # Skip control logic if sensor read failed
+        except Exception as e: # Catch any other unexpected errors
+            print(f"Error: Unexpected error reading CO2 sensor: {e}")
+            self.current_co2 = None
+            # Apply safety logic here too
+            if self.vent_relay and self.vent_active:
+                print("Safety: Turning vent OFF due to unexpected error during CO2 reading.")
+                self.vent_relay.off()
+                self.vent_active = False
+                self._vent_start_time = None
+            return # Skip control logic if sensor read failed
+
+        # If read was successful (no exception), current_co2 is now set.
+        # Proceed with the rest of the control logic.
 
         # --- Check if incubator is running ---
         if not self.manager.incubator_running:

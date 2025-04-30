@@ -1,105 +1,96 @@
-import time
-import random
+from __future__ import annotations
+import asyncio
+import datetime as dt
+import logging
+from dataclasses import dataclass
 
-# --- Configuration ---
-# Set to True to force dummy mode even if a real sensor library was added later
-FORCE_DUMMY_MODE = True
-DUMMY_CO2_PPM = 450.0 # Standard atmospheric CO2 is around 400-450 ppm
-DUMMY_VARIATION = 25.0 # Simulate some small fluctuations
+import serial_asyncio
+
+@dataclass(frozen=True)
+class CO2Reading:
+    ppm: int
+    timestamp: dt.datetime = dt.datetime.utcnow()
 
 class CO2Sensor:
-    """
-    Reads CO2 level (in ppm).
-    Currently uses DUMMY values as the sensor is not connected.
-    TODO: Replace with actual sensor integration (e.g., MH-Z19B, Senseair S8).
-    """
-    def __init__(self, i2c_bus=None, address=None, serial_port=None):
-        """
-        Initializes the CO2 sensor reader.
-        Parameters are placeholders for future real sensor integration.
-        """
-        self.is_dummy = True
-        self._last_co2 = DUMMY_CO2_PPM
+    def __init__(self, port='/dev/serial0', baudrate=9600,
+                 init_cmd=b'K 2\r\n', read_cmd=b'Z 2\r\n', *,
+                 timeout=1.0):
+        self._port_cfg = dict(port=port, baudrate=baudrate, timeout=timeout)
+        self._init_cmd = init_cmd
+        self._read_cmd = read_cmd
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
 
-        if FORCE_DUMMY_MODE:
-            print("CO2Sensor initialized in FORCED DUMMY MODE.")
-            return
+    async def __aenter__(self):  # async context manager
+        self._reader, self._writer = await serial_asyncio.open_serial_connection(**self._port_cfg)
+        # Original code had drain/sleep here, but open_serial_connection likely handles readiness.
+        # Let's keep it simple unless issues arise.
+        # await self._writer.drain()
+        # await asyncio.sleep(0.1)
+        if self._init_cmd:
+            logging.getLogger(__name__).info(f"Sending init command: {self._init_cmd!r}")
+            self._writer.write(self._init_cmd)
+            await self._writer.drain()
+            # Consider adding a small delay or reading response if needed
+        return self
 
-        # --- Placeholder for real sensor initialization ---
-        # try:
-        #     # Example: Initialize a real sensor library here
-        #     # self.sensor = RealCO2Library(port=serial_port)
-        #     # self.is_dummy = False
-        #     # print("Real CO2 Sensor Initialized.")
-        #     # self._read_sensor() # Perform initial read
-        #     raise NotImplementedError("Real CO2 sensor integration not yet implemented.")
-        # except Exception as e:
-        #     print(f"Warning: Failed to initialize real CO2 sensor ({e}). Falling back to DUMMY MODE.")
-        #     self.is_dummy = True
-        # --- End Placeholder ---
-
-        if self.is_dummy:
-             print("CO2Sensor initialized in DUMMY MODE.")
-
-
-    def _read_sensor(self) -> float | None:
-        """Internal method to read from the actual sensor."""
-        # --- Placeholder for real sensor reading ---
-        # if self.is_dummy or not hasattr(self, 'sensor'):
-        #      raise RuntimeError("Cannot read from sensor in dummy mode or if not initialized.")
-        # try:
-        #     # co2_value = self.sensor.read_co2()
-        #     # return float(co2_value)
-        #     raise NotImplementedError("Real CO2 sensor reading not yet implemented.")
-        # except Exception as e:
-        #     print(f"Error reading real CO2 sensor: {e}")
-        #     return None
-        # --- End Placeholder ---
-        # This part should ideally not be reached if the placeholder logic is active
-        print("Warning: _read_sensor called unexpectedly in dummy setup.")
-        return None
+    async def __aexit__(self, *exc):
+        if self._writer and not self._writer.is_closing():
+             self._writer.close()
+             try:
+                 await self._writer.wait_closed()
+             except Exception as e:
+                 logging.getLogger(__name__).warning(f"Error closing writer: {e}")
+        self._reader = None
+        self._writer = None
 
 
-    def read(self) -> float | None:
-        """
-        Reads CO2 level in ppm. Returns dummy value if in dummy mode or read fails.
-        """
-        if self.is_dummy:
-            # Simulate slight variation around the dummy value
-            self._last_co2 = round(DUMMY_CO2_PPM + random.uniform(-DUMMY_VARIATION, DUMMY_VARIATION), 1)
-            # print(f"CO2 Read (Dummy): {self._last_co2} ppm") # Optional debug print
-            return self._last_co2
-        else:
-            # --- Placeholder for real sensor reading logic ---
-            # value = self._read_sensor()
-            # if value is not None:
-            #     self._last_co2 = round(value, 1)
-            #     return self._last_co2
-            # else:
-            #     # Return last known value on read failure, or None
-            #     print("Warning: Failed to read real CO2 sensor, returning last known value.")
-            #     return self._last_co2 # Or return None
-            # --- End Placeholder ---
-            print("Warning: Real CO2 sensor read attempted but not implemented.")
-            return self._last_co2 # Return last known dummy value as fallback
+    async def read_ppm(self) -> int:
+        if not self._writer or not self._reader:
+             raise RuntimeError("Sensor connection not established or closed.")
+        logging.getLogger(__name__).debug(f"Sending read command: {self._read_cmd!r}")
+        self._writer.write(self._read_cmd)
+        await self._writer.drain()
+        try:
+            # Increased timeout slightly based on original code
+            line = await asyncio.wait_for(self._reader.readline(), timeout=1.5)
+            logging.getLogger(__name__).debug(f"Received raw data: {line!r}")
+            return self._parse_ppm(line)
+        except asyncio.TimeoutError:
+            logging.getLogger(__name__).error("Timeout waiting for CO2 sensor response.")
+            raise
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Error reading or parsing CO2 sensor data: {e}")
+            raise
 
-    @property
-    def co2(self) -> float | None:
-        """Returns the last successfully read CO2 level in ppm."""
-        # In this dummy implementation, 'read' updates _last_co2, so just return it.
-        # For a real sensor, you might trigger a read here if data is stale,
-        # similar to the DHT sensor, but CO2 sensors often have slower read rates.
-        return self._last_co2
 
-# Example Usage (for testing purposes)
-if __name__ == '__main__':
-    print("Testing CO2Sensor...")
-    sensor = CO2Sensor()
+    @staticmethod
+    def _parse_ppm(raw: bytes) -> int:
+        try:
+            # Expect "Z 1234\r\n" or similar based on read_cmd
+            decoded = raw.decode('ascii', errors='ignore').strip()
+            parts = decoded.split()
+            if not parts:
+                 raise ValueError("Empty response received")
+            # Assuming the value is the last part
+            value_str = parts[-1]
+            # Check if the prefix matches the expected response format if needed
+            # e.g., if self._read_cmd is b'Z\r\n', expect prefix 'Z'
+            # prefix = parts[0]
+            # assert prefix == 'Z' # Or adapt based on actual command/response
+            ppm = int(value_str)
+            logging.getLogger(__name__).debug(f"Parsed PPM: {ppm}")
+            return ppm
+        except (ValueError, IndexError, UnicodeDecodeError) as e:
+            logging.getLogger(__name__).warning(f"Bad frame format: {raw!r} ({e})")
+            raise ValueError(f"Could not parse PPM value from sensor response: {raw!r}") from e
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Unexpected error parsing PPM: {raw!r} ({e})")
+            raise
 
-    print(f"Initial Dummy Read: {sensor.read()} ppm")
-    print("Reading periodically (dummy values)...")
-    for i in range(5):
-        time.sleep(1)
-        print(f"Read {i+1}: {sensor.read()} ppm")
-
-    print("\nTest finished.")
+# Note: The CO2Reading dataclass might be useful elsewhere,
+# but the core functionality is in CO2Sensor.
+# The usage example is commented out as it's not part of the class definition.
+# async def main():
+#     async with CO2Sensor() as sensor:
+#         print(await sensor.read_ppm())
