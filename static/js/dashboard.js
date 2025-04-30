@@ -181,13 +181,17 @@ function updateUI(data) {
     const co2_ppm = data.co2_ppm;
     const co2_percentage = co2_ppm !== null ? (co2_ppm / 10000).toFixed(2) : null;
     document.getElementById('co2-current').textContent = co2_percentage !== null ? `${co2_percentage}%` : '--';
-    document.getElementById('co2-setpoint-display').textContent = data.co2_setpoint_ppm !== null ? data.co2_setpoint_ppm.toFixed(0) : '--';
+    const co2_setpoint_ppm = data.co2_setpoint_ppm;
+    const co2_setpoint_percentage = co2_setpoint_ppm !== null ? (co2_setpoint_ppm / 10000).toFixed(2) : null;
+    document.getElementById('co2-setpoint-display').textContent = co2_setpoint_percentage !== null ? `${co2_setpoint_percentage}%` : '--';
     updateRelayStatus('vent-status', data.vent_active, 'Vent');
     const co2Input = document.getElementById('co2-setpoint-input');
-    if (document.activeElement !== co2Input && data.co2_setpoint_ppm !== null) {
-        co2Input.value = data.co2_setpoint_ppm.toFixed(0);
+    if (document.activeElement !== co2Input && co2_setpoint_percentage !== null) {
+        // Update input field with percentage value
+        co2Input.value = co2_setpoint_percentage;
     }
-    updateChartData('co2', data.co2_ppm); // Update chart data
+    // Update chart data with the current CO2 percentage to match the Y-axis
+    updateChartData('co2', co2_percentage);
 
     // Update Incubator State Button
     if (incubatorToggleButton) {
@@ -231,7 +235,16 @@ function updateSetpoints() {
     if (tempSetpoint !== '') setpoints.temperature = parseFloat(tempSetpoint);
     if (humSetpoint !== '') setpoints.humidity = parseFloat(humSetpoint);
     if (o2Setpoint !== '') setpoints.o2 = parseFloat(o2Setpoint);
-    if (co2Setpoint !== '') setpoints.co2 = parseFloat(co2Setpoint);
+    if (co2Setpoint !== '') {
+        // Convert percentage input back to ppm before sending
+        const co2SetpointPercentage = parseFloat(co2Setpoint);
+        if (!isNaN(co2SetpointPercentage)) {
+            setpoints.co2 = Math.round(co2SetpointPercentage * 10000); // Send ppm to backend
+        } else {
+             console.warn("Invalid CO2 setpoint input:", co2Setpoint);
+             // Optionally display an error to the user here
+        }
+    }
 
     if (Object.keys(setpoints).length === 0) {
         displayError('No setpoint values entered.');
