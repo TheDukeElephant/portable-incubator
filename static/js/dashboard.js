@@ -180,7 +180,7 @@ function updateUI(data) {
     // CO2
     const co2_ppm = data.co2_ppm;
     const co2_percentage = co2_ppm !== null ? (co2_ppm / 10000).toFixed(2) : null;
-    document.getElementById('co2-current').textContent = co2_percentage !== null ? `${co2_percentage}%` : '--';
+    document.getElementById('co2-current').textContent = co2_percentage !== null ? `${co2_percentage}%` : 'NC';
     const co2_setpoint_ppm = data.co2_setpoint_ppm;
     const co2_setpoint_percentage = co2_setpoint_ppm !== null ? (co2_setpoint_ppm / 10000).toFixed(2) : null;
     document.getElementById('co2-setpoint-display').textContent = co2_setpoint_percentage !== null ? `${co2_setpoint_percentage}%` : '--';

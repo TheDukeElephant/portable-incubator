@@ -30,7 +30,7 @@ class CO2Loop(BaseLoop):
         self.sensor = sensor
         self._setpoint = setpoint
         self.vent_relay_pin = vent_relay_pin
-        self.current_co2 = None
+        self.current_co2 = None # Initialize as None
         self.vent_active = False
         self._vent_start_time = None
 
@@ -58,34 +58,36 @@ class CO2Loop(BaseLoop):
     async def control_step(self):
         """Performs a single control step for CO2 management."""
         # 1. Read Sensor (using new async method)
+        reading_successful = False
         try:
             self.current_co2 = await self.sensor.read_ppm()
+            # Check if the sensor itself returned an invalid reading indicator (e.g., None or specific error value)
+            if self.current_co2 is None:
+                 print("Warning: CO2 sensor returned None (disconnected or invalid reading).")
+                 # Keep self.current_co2 as None
+            elif not isinstance(self.current_co2, (int, float)):
+                 print(f"Warning: CO2 sensor returned unexpected type: {type(self.current_co2)}. Treating as invalid.")
+                 self.current_co2 = None # Treat unexpected types as invalid
+            else:
+                 reading_successful = True # Mark as successful only if we got a valid number
             # Optional: Add a debug log here if needed
             # print(f"CO2 Read: {self.current_co2} ppm")
         except (RuntimeError, asyncio.TimeoutError, ValueError) as e:
-            print(f"Warning: Failed to read CO2 sensor: {e}") # Log the specific error
+            print(f"Warning: Failed to read CO2 sensor (exception): {e}") # Log the specific error
             self.current_co2 = None # Ensure current_co2 is None on failure
-            # Safety: Turn off vent if sensor fails? Or maintain last state?
-            # For now, let's turn it off if the reading fails.
-            if self.vent_relay and self.vent_active:
-                print("Safety: Turning vent OFF due to failed CO2 reading.")
-                self.vent_relay.off()
-                self.vent_active = False
-                self._vent_start_time = None
-            return # Skip control logic if sensor read failed
         except Exception as e: # Catch any other unexpected errors
             print(f"Error: Unexpected error reading CO2 sensor: {e}")
             self.current_co2 = None
-            # Apply safety logic here too
+
+        # --- Safety Check & Early Exit on Read Failure ---
+        if not reading_successful:
+            # If reading failed (exception or sensor returned None/invalid), turn off vent
             if self.vent_relay and self.vent_active:
-                print("Safety: Turning vent OFF due to unexpected error during CO2 reading.")
+                print("Safety: Turning vent OFF due to failed/invalid CO2 reading.")
                 self.vent_relay.off()
                 self.vent_active = False
                 self._vent_start_time = None
-            return # Skip control logic if sensor read failed
-
-        # If read was successful (no exception), current_co2 is now set.
-        # Proceed with the rest of the control logic.
+            return # Skip control logic if sensor read failed or was invalid
 
         # --- Check if incubator is running ---
         if not self.manager.incubator_running:
@@ -99,8 +101,10 @@ class CO2Loop(BaseLoop):
         # --- Incubator is running, proceed with control ---
 
         # 2. Control Logic (Simple Threshold)
+        # This part is only reached if reading_successful is True and incubator is running
         # TODO: Add hysteresis or more advanced control if needed
         if self.vent_relay:
+            # We know self.current_co2 is a valid number here
             if self.current_co2 > self._setpoint:
                 if not self.vent_active:
                     print(f"CO2 High ({self.current_co2} ppm > {self._setpoint} ppm). Activating vent.")
@@ -127,6 +131,7 @@ class CO2Loop(BaseLoop):
                  # else: Vent is on, but hasn't met minimum duration yet, keep it on.
 
         else: # Simulation if relay not initialized
+             # We know self.current_co2 is a valid number here
              if self.current_co2 > self._setpoint:
                  if not self.vent_active:
                      print(f"CO2 High ({self.current_co2} ppm > {self._setpoint} ppm). (Simulating vent ON)")
@@ -135,12 +140,12 @@ class CO2Loop(BaseLoop):
                  print(f"CO2 OK ({self.current_co2} ppm <= {self._setpoint} ppm). (Simulating vent OFF)")
                  self.vent_active = False
 
-        # print(f"CO2 Loop: Current={self.current_co2} ppm, Setpoint=<{self._setpoint} ppm, Vent Active={self.vent_active}") # Debug print
+        # print(f"CO2 Loop: Current={self.current_co2} ppm, Setpoint=<{self._setpoint} ppm, Vent Active={self.is_vent_active}") # Debug print
 
     def get_status(self) -> dict:
         """Returns the current status of the CO2 loop."""
         return {
-            "co2_ppm": self.current_co2,
+            "co2_ppm": self.current_co2, # Will be None if reading failed/invalid
             "setpoint_ppm": self._setpoint,
             # Use property which checks incubator_running
             "vent_active": self.is_vent_active,
@@ -160,4 +165,7 @@ class CO2Loop(BaseLoop):
     @property
     def is_vent_active(self) -> bool:
         """Returns True if the vent relay is currently commanded ON and incubator is running."""
-        return self.vent_active and self.manager.incubator_running
+        # Ensure vent_active is False if incubator isn't running
+        if not self.manager.incubator_running:
+            return False
+        return self.vent_active
