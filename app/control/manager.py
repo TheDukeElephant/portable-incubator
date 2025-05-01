@@ -548,13 +548,24 @@ class ControlManager:
                 print(f"[DEBUG] Updated in-memory state: {state_key}={getattr(self, state_key)}")
                 # --- END DEBUGGING ---
 
-                # 6. Turn off actuator immediately if disabling
+                # 6. Turn off actuator immediately if disabling (Kill Switch)
                 if not enabled:
-                    if control_name == "temperature": self.heater_relay.off()
-                    elif control_name == "humidity": self.humidifier_relay.off()
-                    elif control_name == "o2": self.argon_valve_relay.off()
-                    elif control_name == "co2" and self.co2_loop.vent_relay: self.co2_loop.vent_relay.off()
-                    print(f"Turned off actuator for disabled control: {control_name}")
+                    print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
+                    if control_name == "temperature":
+                        self.heater_relay.off()
+                        self.temp_loop.pid.reset() # Reset PID on disable
+                    elif control_name == "humidity":
+                        self.humidifier_relay.off()
+                    elif control_name == "o2":
+                        self.argon_valve_relay.off()
+                    elif control_name == "co2":
+                        if self.co2_loop.vent_relay:
+                            self.co2_loop.vent_relay.off()
+                        # Reset the CO2 loop's internal state if needed
+                        if hasattr(self.co2_loop, 'reset_control'): # Check if method exists
+                             self.co2_loop.reset_control()
+                        else:
+                             print(f"Warning: CO2Loop does not have a 'reset_control' method.")
 
             except Exception as e:
                 # Catch potential errors during load/save/update

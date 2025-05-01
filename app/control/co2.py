@@ -164,6 +164,14 @@ class CO2Loop(BaseLoop):
             self.vent_active = False
         # No need to print stopped message, BaseLoop handles it.
 
+    def reset_control(self):
+        """Resets the vent state, ensuring it's off."""
+        print("CO2Loop: Resetting control state (forcing vent OFF).")
+        if self.vent_relay and self.vent_active:
+            self.vent_relay.off()
+        self.vent_active = False
+        self._vent_start_time = None
+
     # Add property for vent status that considers incubator state
     @property
     def is_vent_active(self) -> bool:
