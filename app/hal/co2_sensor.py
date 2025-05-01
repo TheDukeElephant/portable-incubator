@@ -12,10 +12,11 @@ class CO2Reading:
     timestamp: dt.datetime = dt.datetime.utcnow()
 
 class CO2Sensor:
-    def __init__(self, port='/dev/serial0', baudrate=9600,
+    def __init__(self, url='/dev/serial0', baudrate=9600,
                  init_cmd=b'K 2\r\n', read_cmd=b'Z 2\r\n', *,
                  timeout=1.0):
-        self._port_cfg = dict(port=port, baudrate=baudrate, timeout=timeout)
+        # Store config using 'url' key expected by serial_asyncio
+        self._port_cfg = dict(url=url, baudrate=baudrate, timeout=timeout)
         self._init_cmd = init_cmd
         self._read_cmd = read_cmd
         self._reader: asyncio.StreamReader | None = None
@@ -54,12 +55,17 @@ class CO2Sensor:
                 if not self._writer or not self._reader:
                     logging.getLogger(__name__).warning(f"Attempt {attempt + 1}: Sensor connection not established or closed.")
                     if attempt == retries - 1:
-                        logging.getLogger(__name__).error("Max retries reached. Attempting to reinitialize sensor connection.")
+                        logging.getLogger(__name__).warning("Max retries reached. Attempting to reinitialize sensor connection.")
                         try:
-                            await self.__aenter__()
+                            # Ensure previous connection is closed before reopening
+                            await self.__aexit__() # Close existing streams if any
+                            await self.__aenter__() # Reopen connection using correct config
                             logging.getLogger(__name__).info("Sensor connection reinitialized successfully.")
+                            # After successful reinitialization, continue to the next loop iteration
+                            # which will attempt the read again.
                         except Exception as e:
-                            logging.getLogger(__name__).error(f"Sensor reinitialization failed: {e}")
+                            logging.getLogger(__name__).error(f"Sensor reinitialization failed: {e}", exc_info=True) # Log traceback
+                            # If reinitialization fails, return "NC" for this attempt cycle
                             return "NC"
                     await asyncio.sleep(retry_delay)
                     continue
