@@ -7,17 +7,20 @@ class BaseLoop(ABC):
     Abstract base class for asynchronous control loops.
     Provides common structure for running, stopping, and periodic execution.
     """
-    def __init__(self, manager: 'ControlManager', control_interval: float, enabled_attr: str = None):
+    def __init__(self, manager: 'ControlManager', control_interval: float, enabled_attr: str):
         """
         Initializes the base loop.
 
         Args:
             manager: The ControlManager instance.
             control_interval: The time in seconds between control steps.
-            enabled_attr: The attribute name in the manager that indicates if this loop is enabled.
+            enabled_attr: (Required) The attribute name in the manager that indicates
+                          if this specific loop is enabled (e.g., 'temperature_enabled').
         """
         if control_interval <= 0:
             raise ValueError("Control interval must be positive.")
+        if not enabled_attr or not isinstance(enabled_attr, str):
+            raise ValueError("enabled_attr must be a non-empty string.")
         from .manager import ControlManager
         if not isinstance(manager, ControlManager):
             raise TypeError("Manager must be an instance of ControlManager")
@@ -34,7 +37,13 @@ class BaseLoop(ABC):
         loop is enabled via its corresponding flag in the ControlManager.
         """
         # Check BOTH the main incubator status and the specific enabled flag
-        loop_enabled = getattr(self.manager, self._enabled_attr, True) if self._enabled_attr else True
+        # Ensure the attribute exists on the manager before trying to access it
+        if not hasattr(self.manager, self._enabled_attr):
+             # Log a warning or raise an error if the attribute doesn't exist
+             # For robustness, let's default to False (disabled) if attribute is missing
+             print(f"Warning: Enabled attribute '{self._enabled_attr}' not found on ControlManager. Assuming disabled.")
+             return False
+        loop_enabled = getattr(self.manager, self._enabled_attr)
         return self.manager.incubator_running and loop_enabled
 
     @abstractmethod

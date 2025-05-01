@@ -95,7 +95,8 @@ class ControlManager:
             heater_relay=self.heater_relay,
             setpoint=DEFAULT_TEMP_SETPOINT,
             p=TEMP_PID_P, i=TEMP_PID_I, d=TEMP_PID_D,
-            sample_time=CONTROL_SAMPLE_TIME
+            sample_time=CONTROL_SAMPLE_TIME,
+            enabled_attr="temperature_enabled" # Pass the enabled attribute name
         )
         self.humidity_loop = HumidityLoop(
             manager=self, # Pass manager instance
@@ -103,23 +104,27 @@ class ControlManager:
             humidifier_relay=self.humidifier_relay,
             setpoint=DEFAULT_HUMIDITY_SETPOINT,
             hysteresis=HUMIDITY_HYSTERESIS,
-            sample_time=CONTROL_SAMPLE_TIME
+            sample_time=CONTROL_SAMPLE_TIME,
+            enabled_attr="humidity_enabled" # Pass the enabled attribute name
         )
         self.o2_loop = O2Loop(
             manager=self, # Pass manager instance
             argon_valve_relay=self.argon_valve_relay,
             setpoint=DEFAULT_O2_SETPOINT,
-            sample_time=CONTROL_SAMPLE_TIME
+            sample_time=CONTROL_SAMPLE_TIME,
+            enabled_attr="o2_enabled" # Pass the enabled attribute name
         )
         self.co2_loop = CO2Loop(
             manager=self, # Pass manager instance
             sensor=self.co2_sensor,
             vent_relay_pin=CO2_VENT_PIN,
-            setpoint=DEFAULT_CO2_SETPOINT
+            setpoint=DEFAULT_CO2_SETPOINT,
+            enabled_attr="co2_enabled" # Pass the enabled attribute name
         )
         self.air_pump_loop = AirPumpControlLoop(
             manager=self, # Pass manager instance (required by BaseLoop)
-            control_interval=1.0 # Use control_interval instead of interval_sec
+            control_interval=1.0, # Use control_interval instead of interval_sec
+            enabled_attr="air_pump_enabled" # Pass the enabled attribute name
         )
 
         # 3. Initialize Data Logger
