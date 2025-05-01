@@ -30,11 +30,12 @@ class BaseLoop(ABC):
 
     def _active(self) -> bool:
         """
-        Returns True only when this specific loop is enabled via its
-        corresponding flag in the ControlManager.
+        Returns True only when the main incubator is running AND this specific
+        loop is enabled via its corresponding flag in the ControlManager.
         """
-        # Check only the specific enabled flag, ignore incubator_running
-        return getattr(self.manager, self._enabled_attr, True) if self._enabled_attr else True
+        # Check BOTH the main incubator status and the specific enabled flag
+        loop_enabled = getattr(self.manager, self._enabled_attr, True) if self._enabled_attr else True
+        return self.manager.incubator_running and loop_enabled
 
     @abstractmethod
     def _ensure_actuator_off(self):
