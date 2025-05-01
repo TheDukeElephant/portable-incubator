@@ -168,7 +168,7 @@ function updateUI(data) {
     updateChartData('humidity', data.humidity); // Update chart data
 
     // Oxygen
-    document.getElementById('o2-current').textContent = data.o2 !== null ? data.o2.toFixed(2) : '--';
+    document.getElementById('o2-current').textContent = data.o2 !== null ? data.o2.toFixed(2) : 'NC';
     document.getElementById('o2-setpoint-display').textContent = data.o2_setpoint !== null ? data.o2_setpoint.toFixed(1) : '--';
     updateRelayStatus('argon-status', data.argon_valve_on, 'Argon Valve');
      const o2Input = document.getElementById('o2-setpoint-input');
