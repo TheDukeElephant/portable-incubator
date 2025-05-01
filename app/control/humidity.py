@@ -37,7 +37,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
             raise ValueError("Hysteresis must be a positive value.")
 
         # Call BaseLoop constructor, passing the manager and interval
-        super().__init__(manager=manager, control_interval=sample_time) # Pass the manager instance
+        super().__init__(manager=manager, control_interval=sample_time, enabled_attr="humidity_enabled") # Pass the manager instance
 
         self.humidity_sensor = humidity_sensor
         self.humidifier_relay = humidifier_relay

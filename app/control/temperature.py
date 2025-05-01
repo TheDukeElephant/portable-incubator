@@ -40,7 +40,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
             output_threshold: The PID output value above which the heater turns on.
         """
         # Call BaseLoop constructor, passing the manager and interval
-        super().__init__(manager=manager, control_interval=sample_time)
+        super().__init__(manager=manager, control_interval=sample_time, enabled_attr="temperature_enabled")
 
         self.temp_sensor = temp_sensor
         self.heater_relay = heater_relay

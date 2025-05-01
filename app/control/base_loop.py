@@ -7,7 +7,35 @@ class BaseLoop(ABC):
     Abstract base class for asynchronous control loops.
     Provides common structure for running, stopping, and periodic execution.
     """
-    def __init__(self, manager: 'ControlManager', control_interval: float):
+    def __init__(self, manager: 'ControlManager', control_interval: float, enabled_attr: str = None):
+        """
+        Initializes the base loop.
+
+        Args:
+            manager: The ControlManager instance.
+            control_interval: The time in seconds between control steps.
+            enabled_attr: The attribute name in the manager that indicates if this loop is enabled.
+        """
+        if control_interval <= 0:
+            raise ValueError("Control interval must be positive.")
+        from .manager import ControlManager
+        if not isinstance(manager, ControlManager):
+            raise TypeError("Manager must be an instance of ControlManager")
+        self.manager = manager
+        self.control_interval = control_interval
+        self._enabled_attr = enabled_attr
+        self._is_running = False
+        self._stop_event = asyncio.Event()
+        self._task: asyncio.Task | None = None
+
+    def _active(self) -> bool:
+        """
+        Returns True only when BOTH
+          * the global incubator switch is ON, and
+          * this specific loop is enabled.
+        """
+        return (self.manager.incubator_running and
+                (getattr(self.manager, self._enabled_attr, True) if self._enabled_attr else True))
         """
         Initializes the base loop.
 
@@ -54,6 +82,10 @@ class BaseLoop(ABC):
         self._stop_event.clear()
 
         while self._is_running:
+            if not self._active():
+                self._ensure_actuator_off()
+                await asyncio.sleep(self.control_interval)
+                continue
             start_time = time.monotonic()
             try:
                 await self.control_step()

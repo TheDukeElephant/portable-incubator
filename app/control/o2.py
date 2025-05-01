@@ -40,7 +40,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
                          Can be ADDRESS_1 (0x71), ADDRESS_2 (0x72), ADDRESS_3 (0x73).
         """
         # Call BaseLoop constructor, passing the manager and interval
-        super().__init__(manager=manager, control_interval=sample_time)
+        super().__init__(manager=manager, control_interval=sample_time, enabled_attr="o2_enabled")
 
         self.argon_valve_relay = argon_valve_relay
         self._setpoint = setpoint

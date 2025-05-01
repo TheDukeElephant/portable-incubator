@@ -26,7 +26,7 @@ class CO2Loop(BaseLoop):
                  sensor: CO2Sensor,
                  vent_relay_pin: int,
                  setpoint: float = DEFAULT_CO2_SETPOINT_PPM):
-        super().__init__(manager=manager, control_interval=CONTROL_INTERVAL_SECONDS) # Pass manager
+        super().__init__(manager=manager, control_interval=CONTROL_INTERVAL_SECONDS, enabled_attr="co2_enabled") # Pass manager
         self.sensor = sensor
         self._setpoint = setpoint
         self.vent_relay_pin = vent_relay_pin
