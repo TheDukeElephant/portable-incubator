@@ -36,7 +36,7 @@ class CO2Loop(BaseLoop):
 
         # Initialize the vent relay using the provided pin
         try:
-            self.vent_relay = RelayOutput(self.vent_relay_pin, initial_state=False) # Start with vent OFF
+            self.vent_relay = RelayOutput(self.vent_relay_pin, initial_value=False) # Start with vent OFF
             print(f"CO2Loop initialized. Vent Relay on GPIO {self.vent_relay_pin}. Setpoint: < {self._setpoint} ppm")
         except Exception as e:
             # Handle cases where GPIO might not be available (e.g., testing off-Pi)

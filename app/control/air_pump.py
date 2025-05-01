@@ -21,18 +21,22 @@ class AirPumpControlLoop(BaseLoop):
     """
     Control loop for managing the air pump connected via L298N driver.
     Runs the pump for a set duration at a specific interval.
+    Implements the control_step required by BaseLoop.
     """
-    def __init__(self, interval_sec=1):
+    def __init__(self, manager: 'ControlManager', control_interval: float):
         """
         Initializes the air pump control loop.
 
         Args:
-            interval_sec (int): How often the step method should be called (in seconds).
-                                This loop's internal timing is based on time.monotonic(),
-                                so the call interval mainly affects responsiveness.
+            manager: The ControlManager instance (required by BaseLoop).
+            control_interval (float): How often the control_step method should be called (in seconds).
+                                      This loop's internal timing is based on time.monotonic(),
+                                      so the call interval mainly affects responsiveness.
         """
-        super().__init__(interval_sec)
-        self.name = "AirPumpControl"
+        # Import ControlManager locally to avoid circular import issues if needed
+        from app.control.manager import ControlManager
+        super().__init__(manager, control_interval)
+        # self.name = "AirPumpControl" # Name is usually handled by class name or manager
         try:
             self.motor = L298NMotor(pin_ena=PIN_ENA, pin_in1=PIN_IN1, pin_in2=PIN_IN2)
             logger.info(f"AirPumpControlLoop initialized with motor on ENA={PIN_ENA}, IN1={PIN_IN1}, IN2={PIN_IN2}")
@@ -44,10 +48,10 @@ class AirPumpControlLoop(BaseLoop):
         self.last_cycle_start_time = time.monotonic()
         self.pump_state = "off" # Initial state
 
-    def step(self):
+    async def control_step(self):
         """
-        Executes one step of the control loop.
-        Manages the on/off cycle of the air pump.
+        Executes one asynchronous step of the control loop.
+        Manages the on/off cycle of the air pump based on elapsed time.
         """
         if not self.motor:
             # logger.warning("Air pump motor not initialized, skipping step.")
@@ -125,20 +129,27 @@ class AirPumpControlLoop(BaseLoop):
         else:
             logger.info("AirPumpControlLoop cleanup skipped (motor not initialized).")
 
-# Example usage (for testing purposes)
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    print("Starting Air Pump Control Loop test...")
-    pump_loop = AirPumpControlLoop(interval_sec=0.5) # Run step more frequently for testing
-
-    try:
-        start_time = time.time()
-        while time.time() - start_time < PUMP_CYCLE_DURATION_S * 2.5: # Run for 2.5 cycles
-            pump_loop.step()
-            time.sleep(pump_loop.interval_sec)
-    except KeyboardInterrupt:
-        print("\nTest interrupted by user.")
-    finally:
-        print("Cleaning up...")
-        pump_loop.cleanup()
-        print("Test finished.")
+# Example usage (for testing purposes - needs adaptation for async and manager)
+# if __name__ == '__main__':
+#     import asyncio
+#     # This example needs a mock manager or adaptation to run standalone
+#     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#     print("Starting Air Pump Control Loop test (requires async setup)...")
+#
+#     async def run_test():
+#         # Mock manager needed here
+#         # pump_loop = AirPumpControlLoop(manager=None, control_interval=0.5)
+#         print("Mock manager and async runner required for standalone test.")
+#         # try:
+#         #     start_time = time.monotonic()
+#         #     while time.monotonic() - start_time < PUMP_CYCLE_DURATION_S * 2.5: # Run for 2.5 cycles
+#         #         await pump_loop.control_step()
+#         #         await asyncio.sleep(pump_loop.control_interval) # Use asyncio.sleep
+#         # except KeyboardInterrupt:
+#         #     print("\nTest interrupted by user.")
+#         # finally:
+#         #     print("Cleaning up...")
+#         #     pump_loop.cleanup() # Cleanup might need async adaptation if it blocks
+#         #     print("Test finished.")
+#
+#     # asyncio.run(run_test())

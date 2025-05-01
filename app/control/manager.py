@@ -107,10 +107,8 @@ class ControlManager:
             setpoint=DEFAULT_CO2_SETPOINT
         )
         self.air_pump_loop = AirPumpControlLoop(
-            # No specific HAL needed here, it manages its own motor driver
-            # Pass manager for consistency, though not currently used by AirPumpControlLoop
-            # manager=self, # BaseLoop doesn't require manager, AirPump doesn't use it yet
-            interval_sec=1.0 # Check pump state every second
+            manager=self, # Pass manager instance (required by BaseLoop)
+            control_interval=1.0 # Use control_interval instead of interval_sec
         )
 
         # 3. Initialize Data Logger
