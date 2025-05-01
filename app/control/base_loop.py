@@ -57,6 +57,7 @@ class BaseLoop(ABC):
 
     @abstractmethod
     async def control_step(self):
+        print(f"[{self.__class__.__name__}] active={self._active()} main={self.manager.incubator_running} enabled={getattr(self.manager, self._enabled_attr, None)}")
         """
         Perform a single control action.
         This method must be implemented by subclasses.
