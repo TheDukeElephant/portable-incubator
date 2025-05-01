@@ -369,7 +369,7 @@ class ControlManager:
             "temperature": temp_status.get("temperature"),
             "temp_setpoint": temp_status.get("setpoint"),
             "heater_on": temp_status.get("heater_on"), # This now reflects incubator_running via loop's property
-            "humidity": hum_status.get("humidity"),
+            "humidity": hum_status.get("humidity"),  # Ensure this handles float or "NC"
             "humidity_setpoint": hum_status.get("setpoint"),
             "humidifier_on": hum_status.get("humidifier_on"), # This now reflects incubator_running via loop's property
             "o2": o2_status.get("o2"),

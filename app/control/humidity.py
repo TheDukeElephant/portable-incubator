@@ -66,19 +66,18 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
         if hum is not None:
             self._current_humidity = hum
         else:
-            # Keep the last known humidity if read fails? Or set to None?
-            print("Warning: Failed to read humidity sensor.")
-            # self._current_humidity = None # Option 1: Indicate failure
-            pass # Option 2: Keep last known value (use with caution)
+            # Indicate failure with "NC" (Not Connected)
+            print("Warning: Failed to read humidity sensor. Setting humidity to 'NC'.")
+            self._current_humidity = "NC"
 
 
     async def control_step(self):
         """Reads sensor, applies hysteresis logic, and updates the humidifier relay state."""
         self._read_sensor() # Read sensor first
 
-        if self._current_humidity is None:
-            # Safety measure: If we don't know the humidity, turn the humidifier off.
-            print("Safety: Turning humidifier OFF due to unknown humidity.")
+        if self._current_humidity == "NC":
+            # Safety measure: If humidity is "NC", turn the humidifier off.
+            print("Safety: Turning humidifier OFF due to sensor failure.")
             if self._humidifier_on: # Only act if it was on
                  self.humidifier_relay.off()
                  self._humidifier_on = False

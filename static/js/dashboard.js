@@ -158,7 +158,13 @@ function updateUI(data) {
 
 
     // Humidity
-    document.getElementById('hum-current').textContent = data.humidity !== null ? data.humidity.toFixed(2) : '--';
+    if (data.humidity === "NC") {
+        document.getElementById('hum-current').textContent = "NC";
+    } else if (data.humidity !== null) {
+        document.getElementById('hum-current').textContent = `${data.humidity.toFixed(2)}% RH`;
+    } else {
+        document.getElementById('hum-current').textContent = '--';
+    }
     document.getElementById('hum-setpoint-display').textContent = data.humidity_setpoint !== null ? data.humidity_setpoint.toFixed(1) : '--';
     updateRelayStatus('humidifier-status', data.humidifier_on, 'Humidifier');
     const humInput = document.getElementById('hum-setpoint-input');

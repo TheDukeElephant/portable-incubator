@@ -112,7 +112,9 @@ def ui():
 def status():
     """Returns the current status of the incubator."""
     current_status = manager.get_status()
-    return jsonify(current_status)
+    # Ensure humidity is included in the response
+    humidity = current_status.get("humidity", "NC")
+    return jsonify({**current_status, "humidity": humidity})
 
 @main_bp.route("/setpoints", methods=["PUT"])
 def setpoints():

@@ -198,8 +198,6 @@ class DHT22Sensor:
     @property
     def humidity(self) -> float | None:
         """Returns the last successfully read humidity percentage."""
-        # Optionally trigger a read here
-        # self.read()
         return self._last_humidity
 
     def start_background_initialization(self):
