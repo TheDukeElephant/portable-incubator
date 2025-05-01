@@ -129,90 +129,94 @@ class ControlManager:
         self._load_state()
 
 
-    def _save_state(self):
-        """Saves the current setpoints, running state, and enabled states to a JSON file."""
-        with self._state_lock: # Acquire lock before accessing/writing state
-            state = {
-                'temp_setpoint': self.temp_loop.setpoint,
-                'humidity_setpoint': self.humidity_loop.setpoint,
-            'o2_setpoint': self.o2_loop.setpoint,
-            'co2_setpoint': self.co2_loop.setpoint,
-            'incubator_running': self.incubator_running,
-            # --- NEW: Save Enabled States ---
-            'temperature_enabled': self.temperature_enabled,
-            'humidity_enabled': self.humidity_enabled,
-            'o2_enabled': self.o2_enabled,
-            'co2_enabled': self.co2_enabled,
-            # ---------------------------------
-        }
+    def _save_state(self, state_to_save: Dict[str, Any]):
+        """Saves the provided state dictionary to a JSON file."""
+        with self._state_lock: # Acquire lock before writing state
             try:
                 with open(STATE_FILE_PATH, 'w') as f:
-                    json.dump(state, f, indent=4)
-                # print(f"Saved state: {state}") # Debugging
+                    json.dump(state_to_save, f, indent=4)
+                # print(f"Saved state: {state_to_save}") # Debugging
             except IOError as e:
                 print(f"Error saving state to {STATE_FILE_PATH}: {e}")
             except Exception as e:
                 print(f"Unexpected error saving state: {e}")
         # Lock is released automatically when exiting 'with' block
 
-    def _load_state(self):
-        """Loads setpoints, running state, and enabled states from JSON file if it exists."""
+    def _load_state(self) -> Dict[str, Any]:
+        """
+        Loads state from JSON file, applies it to the manager/loops,
+        and returns the loaded state dictionary (or defaults).
+        """
+        default_state = {
+            'temp_setpoint': DEFAULT_TEMP_SETPOINT,
+            'humidity_setpoint': DEFAULT_HUMIDITY_SETPOINT,
+            'o2_setpoint': DEFAULT_O2_SETPOINT,
+            'co2_setpoint': DEFAULT_CO2_SETPOINT,
+            'incubator_running': False,
+            'temperature_enabled': True,
+            'humidity_enabled': True,
+            'o2_enabled': True,
+            'co2_enabled': True,
+        }
+        loaded_state = default_state.copy() # Start with defaults
+
         with self._state_lock: # Acquire lock before accessing/reading state
             if not os.path.exists(STATE_FILE_PATH):
                 print(f"State file {STATE_FILE_PATH} not found. Using default values.")
-                # Don't save here, just use the defaults already set in __init__
-                return
+                # Apply defaults to self attributes
+                self._apply_state_to_self(default_state)
+                return default_state # Return defaults
 
             try:
-                # Try block now covers file reading and state application
                 with open(STATE_FILE_PATH, 'r') as f:
-                    state = json.load(f) # Load state inside the 'with' block
+                    state_from_file = json.load(f)
 
-                    # Process the loaded state *inside* the 'with' block too
-                    print(f"Loading state from {STATE_FILE_PATH}: {state}")
-
-                    # Apply loaded state only if keys exist and values are reasonable (basic check)
-                    if isinstance(state, dict):
-                        if 'temp_setpoint' in state and isinstance(state['temp_setpoint'], (int, float)):
-                            self.temp_loop.setpoint = float(state['temp_setpoint'])
-                        if 'humidity_setpoint' in state and isinstance(state['humidity_setpoint'], (int, float)):
-                            self.humidity_loop.setpoint = float(state['humidity_setpoint'])
-                        if 'o2_setpoint' in state and isinstance(state['o2_setpoint'], (int, float)):
-                            self.o2_loop.setpoint = float(state['o2_setpoint'])
-                        if 'co2_setpoint' in state and isinstance(state['co2_setpoint'], (int, float)):
-                            self.co2_loop.setpoint = float(state['co2_setpoint'])
-                        # Global Running State
-                        if 'incubator_running' in state and isinstance(state['incubator_running'], bool):
-                             self.incubator_running = state['incubator_running']
-
-                        # --- NEW: Load Enabled States ---
-                        if 'temperature_enabled' in state and isinstance(state['temperature_enabled'], bool):
-                            self.temperature_enabled = state['temperature_enabled']
-                        if 'humidity_enabled' in state and isinstance(state['humidity_enabled'], bool):
-                            self.humidity_enabled = state['humidity_enabled']
-                        if 'o2_enabled' in state and isinstance(state['o2_enabled'], bool):
-                            self.o2_enabled = state['o2_enabled']
-                        if 'co2_enabled' in state and isinstance(state['co2_enabled'], bool):
-                            self.co2_enabled = state['co2_enabled']
-                        # ---------------------------------
-
-                        print("Successfully applied loaded state.")
-                    else:
-                         print(f"Invalid state format in {STATE_FILE_PATH}. Using default values.")
-                         # Apply defaults explicitly instead of saving current state
-                         self._apply_default_enabled_states() # Apply defaults
-                # End of 'with open(...)' block
+                if isinstance(state_from_file, dict):
+                    # Update defaults with values from file, ensuring all keys exist
+                    loaded_state.update(state_from_file)
+                    print(f"Loading state from {STATE_FILE_PATH}: {loaded_state}")
+                    # Apply the merged state to self attributes
+                    self._apply_state_to_self(loaded_state)
+                    print("Successfully applied loaded state.")
+                else:
+                    print(f"Invalid state format in {STATE_FILE_PATH}. Using default values.")
+                    self._apply_state_to_self(default_state) # Apply defaults to self
+                    loaded_state = default_state # Ensure we return defaults
 
             except (IOError, json.JSONDecodeError) as e:
-                # Except blocks are now correctly associated with the try and inside the lock
                 print(f"Error loading state from {STATE_FILE_PATH}: {e}. Using default values.")
-                # Apply defaults explicitly
-                self._apply_default_enabled_states() # Apply defaults
+                self._apply_state_to_self(default_state) # Apply defaults to self
+                loaded_state = default_state # Ensure we return defaults
             except Exception as e:
                 print(f"Unexpected error loading state: {e}. Using default values.")
-                # Apply defaults explicitly
-                self._apply_default_enabled_states() # Apply defaults
-        # Lock is released automatically when exiting 'with' block
+                self._apply_state_to_self(default_state) # Apply defaults to self
+                loaded_state = default_state # Ensure we return defaults
+
+        return loaded_state # Return the state dictionary that was applied
+
+    def _apply_state_to_self(self, state: Dict[str, Any]):
+        """Applies values from a state dictionary to the manager's attributes and loops."""
+        # Apply setpoints (handle potential type errors)
+        try:
+            self.temp_loop.setpoint = float(state.get('temp_setpoint', DEFAULT_TEMP_SETPOINT))
+            self.humidity_loop.setpoint = float(state.get('humidity_setpoint', DEFAULT_HUMIDITY_SETPOINT))
+            self.o2_loop.setpoint = float(state.get('o2_setpoint', DEFAULT_O2_SETPOINT))
+            self.co2_loop.setpoint = float(state.get('co2_setpoint', DEFAULT_CO2_SETPOINT))
+        except (ValueError, TypeError) as e:
+             print(f"Warning: Error applying setpoints from state: {e}. Using defaults.")
+             self.temp_loop.setpoint = DEFAULT_TEMP_SETPOINT
+             self.humidity_loop.setpoint = DEFAULT_HUMIDITY_SETPOINT
+             self.o2_loop.setpoint = DEFAULT_O2_SETPOINT
+             self.co2_loop.setpoint = DEFAULT_CO2_SETPOINT
+
+        # Apply running state
+        self.incubator_running = bool(state.get('incubator_running', False))
+
+        # Apply enabled states
+        self.temperature_enabled = bool(state.get('temperature_enabled', True))
+        self.humidity_enabled = bool(state.get('humidity_enabled', True))
+        self.o2_enabled = bool(state.get('o2_enabled', True))
+        self.co2_enabled = bool(state.get('co2_enabled', True))
 
 
     def _apply_default_enabled_states(self):
@@ -463,7 +467,19 @@ class ControlManager:
             finally:
                 # Save state only if a value actually changed
                 if changed:
-                    self._save_state()
+                    # Construct the current state from self attributes to pass to save
+                    current_state = {
+                        'temp_setpoint': self.temp_loop.setpoint,
+                        'humidity_setpoint': self.humidity_loop.setpoint,
+                        'o2_setpoint': self.o2_loop.setpoint,
+                        'co2_setpoint': self.co2_loop.setpoint,
+                        'incubator_running': self.incubator_running,
+                        'temperature_enabled': self.temperature_enabled,
+                        'humidity_enabled': self.humidity_enabled,
+                        'o2_enabled': self.o2_enabled,
+                        'co2_enabled': self.co2_enabled,
+                    }
+                    self._save_state(current_state)
 
     # --- NEW: Getter/Setter Methods for Enabled States ---
     def get_control_state(self, control_name: str) -> Optional[bool]:
@@ -481,47 +497,69 @@ class ControlManager:
                 return None
 
     def set_control_state(self, control_name: str, enabled: bool):
-            """Sets the enabled state of a specific control loop and saves the state."""
-            state_changed = False
-            original_state = None
+            """
+            Sets the enabled state of a specific control loop by loading the current state,
+            modifying it, saving it back, and then updating the in-memory state.
+            """
+            control_key_map = {
+                "temperature": "temperature_enabled",
+                "humidity": "humidity_enabled",
+                "o2": "o2_enabled",
+                "co2": "co2_enabled",
+            }
+
+            if control_name not in control_key_map:
+                print(f"Error: Unknown control name '{control_name}' in set_control_state")
+                return
+
+            state_key = control_key_map[control_name]
 
             # --- DEBUGGING ---
-            print(f"[DEBUG] Before set_control_state('{control_name}', {enabled}): temp={self.temperature_enabled}, hum={self.humidity_enabled}, o2={self.o2_enabled}, co2={self.co2_enabled}")
+            print(f"[DEBUG] Attempting set_control_state('{control_name}', {enabled}). Current in-memory: {state_key}={getattr(self, state_key, 'N/A')}")
             # --- END DEBUGGING ---
 
-            if control_name == "temperature":
-                original_state = self.temperature_enabled
-                self.temperature_enabled = enabled
-                state_changed = original_state != enabled
-                if not enabled: self.heater_relay.off() # Ensure actuator is off immediately
-            elif control_name == "humidity":
-                original_state = self.humidity_enabled
-                self.humidity_enabled = enabled
-                state_changed = original_state != enabled
-                if not enabled: self.humidifier_relay.off() # Ensure actuator is off immediately
-            elif control_name == "o2":
-                original_state = self.o2_enabled
-                self.o2_enabled = enabled
-                state_changed = original_state != enabled
-                if not enabled: self.argon_valve_relay.off() # Ensure actuator is off immediately
-            elif control_name == "co2":
-                original_state = self.co2_enabled
-                self.co2_enabled = enabled
-                state_changed = original_state != enabled
-                if not enabled and self.co2_loop.vent_relay:
-                     self.co2_loop.vent_relay.off() # Ensure actuator is off immediately
-            else:
-                print(f"Error: Unknown control name '{control_name}' in set_control_state")
-                return # Don't save state if name is invalid
+            try:
+                # 1. Load current persisted state
+                current_state = self._load_state() # This also updates self attributes as a side effect, but we reload fresh
 
-            if state_changed:
+                # 2. Check if change is needed
+                original_value = current_state.get(state_key, None) # Get value from loaded dict
+                if original_value == enabled:
+                    print(f"{control_name} enabled state already {enabled}.")
+                    # Ensure in-memory matches persisted state even if no change needed
+                    setattr(self, state_key, enabled)
+                    return # No change needed
+
+                # 3. Modify the specific key in the loaded dictionary
+                current_state[state_key] = enabled
+
                 # --- DEBUGGING ---
-                print(f"[DEBUG] After set_control_state('{control_name}', {enabled}): temp={self.temperature_enabled}, hum={self.humidity_enabled}, o2={self.o2_enabled}, co2={self.co2_enabled}")
+                print(f"[DEBUG] Modified state dict for saving: {current_state}")
                 # --- END DEBUGGING ---
-                print(f"Set {control_name} enabled state to: {enabled}")
-                self._save_state() # Save the updated state
-            # else:
-            #     print(f"{control_name} enabled state already {enabled}.") # Optional print
+
+                # 4. Save the modified dictionary back to the file
+                self._save_state(current_state)
+                print(f"Successfully saved {state_key} = {enabled} to state file.")
+
+                # 5. *After* successful save, update the in-memory attribute
+                setattr(self, state_key, enabled)
+
+                # --- DEBUGGING ---
+                print(f"[DEBUG] Updated in-memory state: {state_key}={getattr(self, state_key)}")
+                # --- END DEBUGGING ---
+
+                # 6. Turn off actuator immediately if disabling
+                if not enabled:
+                    if control_name == "temperature": self.heater_relay.off()
+                    elif control_name == "humidity": self.humidifier_relay.off()
+                    elif control_name == "o2": self.argon_valve_relay.off()
+                    elif control_name == "co2" and self.co2_loop.vent_relay: self.co2_loop.vent_relay.off()
+                    print(f"Turned off actuator for disabled control: {control_name}")
+
+            except Exception as e:
+                # Catch potential errors during load/save/update
+                print(f"Error during set_control_state for '{control_name}': {e}")
+                # Avoid changing in-memory state if persistence failed
 
     # ----------------------------------------------------
 
