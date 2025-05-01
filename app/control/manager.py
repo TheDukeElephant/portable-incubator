@@ -364,33 +364,48 @@ class ControlManager:
 
 
     async def start_incubator(self):
-            """Allows actuators to run based on control loop logic and enabled flags."""
-            if not self._manager_active:
-                print("Cannot start incubator: Manager not active.")
-                return
-            if self.incubator_running:
-                print("Incubator already running.")
-                return
+        """Allows actuators to run based on control loop logic and enabled flags."""
+        if not self._manager_active:
+            print("Cannot start incubator: Manager not active.")
+            return
+        if self.incubator_running:
+            print("Incubator already running.")
+            return
 
-            print("Starting Incubator (enabling actuators)...")
-            self.incubator_running = True
+        print("Starting Incubator (enabling actuators)...")
+        self.incubator_running = True
+        # Ensure individual control states are respected
+        if not self.temperature_enabled:
+            self.heater_relay.off()
+        if not self.humidity_enabled:
+            self.humidifier_relay.off()
+        if not self.o2_enabled:
+            self.argon_valve_relay.off()
+        if not self.co2_enabled and self.co2_loop.vent_relay:
+            self.co2_loop.vent_relay.off()
             # Loops are already running, changing the flag enables control (if individually enabled)
             # self._save_state() # REMOVED: Don't save state on main toggle
 
     async def stop_incubator(self, force_off=False):
-            """
-            Disallows actuators from running, turning them off.
-            If force_off is True, turns off actuators even if manager is stopping.
-            """
-            if not self._manager_active and not force_off:
-                print("Cannot stop incubator: Manager not active.")
-                return
-            if not self.incubator_running and not force_off:
-                # print("Incubator already stopped.") # Optional print
-                return
+        """
+        Disallows actuators from running, turning them off.
+        If force_off is True, turns off actuators even if manager is stopping.
+        """
+        if not self._manager_active and not force_off:
+            print("Cannot stop incubator: Manager not active.")
+            return
+        if not self.incubator_running and not force_off:
+            # print("Incubator already stopped.") # Optional print
+            return
 
-            print("Stopping Incubator (disabling actuators)...")
-            self.incubator_running = False
+        print("Stopping Incubator (disabling actuators)...")
+        self.incubator_running = False
+        # Ensure all actuators are turned off regardless of individual states
+        self.heater_relay.off()
+        self.humidifier_relay.off()
+        self.argon_valve_relay.off()
+        if self.co2_loop.vent_relay:
+            self.co2_loop.vent_relay.off()
             # if self._manager_active: # Only save state if manager is active
             #      self._save_state() # REMOVED: Don't save state on main toggle
 
