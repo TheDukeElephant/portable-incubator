@@ -2,7 +2,7 @@
 
 ## Description
 
-The Portable Incubator project is a sophisticated, Flask-based web application meticulously engineered to monitor and precisely control the environmental conditions within a portable incubator unit. Leveraging real-time data acquisition from a suite of integrated sensors (including Temperature, Humidity, Carbon Dioxide (CO2), and Oxygen (O2)), the system employs advanced control algorithms to manage actuators, such as heating elements, humidifiers, and ventilation systems (via relays), ensuring optimal and stable conditions are maintained according to user-defined setpoints. The application features a dynamic web interface, providing users with intuitive visualization of sensor data streams, system status indicators, and comprehensive tools for managing control parameters and system configuration.
+The Portable Incubator project is a sophisticated, Flask-based web application meticulously engineered to monitor and precisely control the environmental conditions within a portable incubator unit. Leveraging real-time data acquisition from a suite of integrated sensors (including Temperature, Humidity, Carbon Dioxide (CO2), and Oxygen (O2)), the system employs advanced control algorithms to manage actuators, such as heating elements, humidifiers, and ventilation systems (via relays), ensuring optimal and stable conditions are maintained according to user-defined setpoints. The application features a dynamic web interface, providing users with intuitive visualization of sensor data streams, system status indicators, and comprehensive tools for managing control parameters and system configuration..
 
 ## Features
 
