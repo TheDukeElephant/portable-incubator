@@ -46,8 +46,42 @@ class CO2Sensor:
 
 
     async def read_ppm(self) -> int:
-        if not self._writer or not self._reader:
-             raise RuntimeError("Sensor connection not established or closed.")
+        retries = 3
+        retry_delay = 0.5
+
+        for attempt in range(retries):
+            try:
+                if not self._writer or not self._reader:
+                    logging.getLogger(__name__).warning(f"Attempt {attempt + 1}: Sensor connection not established or closed.")
+                    if attempt == retries - 1:
+                        logging.getLogger(__name__).error("Max retries reached. Attempting to reinitialize sensor connection.")
+                        try:
+                            await self.__aenter__()
+                            logging.getLogger(__name__).info("Sensor connection reinitialized successfully.")
+                        except Exception as e:
+                            logging.getLogger(__name__).error(f"Sensor reinitialization failed: {e}")
+                            return "NC"
+                    await asyncio.sleep(retry_delay)
+                    continue
+
+                logging.getLogger(__name__).debug(f"Sending read command: {self._read_cmd!r}")
+                self._writer.write(self._read_cmd)
+                await self._writer.drain()
+                line = await asyncio.wait_for(self._reader.readline(), timeout=1.5)
+                logging.getLogger(__name__).debug(f"Received raw data: {line!r}")
+                return self._parse_ppm(line)
+
+            except asyncio.TimeoutError:
+                logging.getLogger(__name__).error(f"Attempt {attempt + 1}: Timeout waiting for CO2 sensor response.")
+            except Exception as e:
+                logging.getLogger(__name__).error(f"Attempt {attempt + 1}: Error reading or parsing CO2 sensor data: {e}")
+
+            if attempt < retries - 1:
+                await asyncio.sleep(retry_delay)
+
+        logging.getLogger(__name__).error("Max retries reached. Returning 'NC'.")
+        return "NC"
+                    continue
         logging.getLogger(__name__).debug(f"Sending read command: {self._read_cmd!r}")
         self._writer.write(self._read_cmd)
         await self._writer.drain()
@@ -61,7 +95,12 @@ class CO2Sensor:
             raise
         except Exception as e:
             logging.getLogger(__name__).error(f"Error reading or parsing CO2 sensor data: {e}")
-            raise
+            if attempt == retries - 1:
+                logging.getLogger(__name__).error("Max retries reached. Returning 'NC'.")
+                return "NC"
+            else:
+                await asyncio.sleep(retry_delay)
+                break
 
 
     @staticmethod

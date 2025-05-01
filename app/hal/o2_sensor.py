@@ -35,7 +35,11 @@ class DFRobot_Oxygen(object):
   __txbuf      = [0]
   __oxygendata = [0]*101
   def __init__(self, bus):
-    self.i2cbus = smbus.SMBus(bus)
+    try:
+        self.i2cbus = smbus.SMBus(bus)
+    except Exception as e:
+        print(f"Failed to initialize SMBus on bus {bus}: {e}")
+        raise IOError(f"SMBus initialization failed on bus {bus}")
 
   def get_flash(self):
     # NOTE: Added error handling
@@ -79,10 +83,25 @@ class DFRobot_Oxygen(object):
       @param collectNum The number of data to be smoothed
       @n     For example, upload 20 and take the average value of the 20 data, then return the concentration data
       @return Oxygen concentration (float, unit vol) or "NC" (string) if sensor not connected/error.
+      Includes retries and reinitialization for robustness.
     '''
     # NOTE: Modified to handle errors and return "NC"
-    if not self.get_flash(): # Try to read key, handles initial communication check
-        return "NC"
+    retries = 3
+    retry_delay = 0.5
+
+    for attempt in range(retries):
+        if not self.get_flash():  # Try to read key, handles initial communication check
+            if attempt == retries - 1:
+                print("Max retries reached. Attempting to reinitialize sensor.")
+                try:
+                    self.__init__(self.i2cbus.fd if hasattr(self.i2cbus, 'fd') else bus, self.__addr)
+                    print("Sensor reinitialized successfully.")
+                except Exception as e:
+                    print(f"Sensor reinitialization failed: {e}")
+                    return "NC"
+            else:
+                time.sleep(retry_delay)
+                continue
 
     if 0 < collect_num <= 100:
       try:

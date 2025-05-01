@@ -128,7 +128,7 @@ class DHT22Sensor:
              print("DHT22 Internal Read Error: Sensor device not available.")
              return False
 
-        retries = 5
+        retries = 3
         delay_seconds = 2 # DHT22 needs at least 2 seconds between reads
 
         for attempt in range(retries):
@@ -146,6 +146,15 @@ class DHT22Sensor:
                 else:
                     # Got None or unrealistic values
                     print(f"DHT22 Read Attempt {attempt + 1}: Unrealistic/None values (Temp={temperature}, Hum={humidity}). Retrying...")
+                    if attempt == retries - 1:
+                        print("Max retries reached. Attempting to reinitialize sensor.")
+                        try:
+                            board_pin = getattr(board, f'D{self.pin_number}')
+                            self.dht_device = SENSOR_TYPE(board_pin, use_pulseio=False)
+                            print("Sensor reinitialized successfully.")
+                        except Exception as e:
+                            print(f"Sensor reinitialization failed: {e}")
+                            return False
 
             except RuntimeError as error:
                 # Common error for read failures
