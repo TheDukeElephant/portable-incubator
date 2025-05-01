@@ -95,7 +95,6 @@ class ControlManager:
         )
         self.o2_loop = O2Loop(
             manager=self, # Pass manager instance
-            o2_sensor=self.o2_sensor,
             argon_valve_relay=self.argon_valve_relay,
             setpoint=DEFAULT_O2_SETPOINT,
             sample_time=CONTROL_SAMPLE_TIME
