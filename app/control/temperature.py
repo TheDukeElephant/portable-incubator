@@ -62,9 +62,11 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
     def _read_sensor(self):
         """Reads the sensor and updates the internal temperature state."""
+        import random
         temp, _ = self.temp_sensor.read() # We only need temperature here
         if temp is not None:
-            self._current_temperature = temp
+            # Add a small random fluctuation to the temperature
+            self._current_temperature = temp + random.uniform(-0.5, 0.5)
         else:
             # Keep the last known temperature if read fails? Or set to None?
             # Setting to None might be safer to prevent PID windup on stale data.
