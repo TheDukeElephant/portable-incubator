@@ -30,8 +30,8 @@ class DHT22Sensor:
         self.dht_device = None
         self._initialization_lock = threading.Lock() # Lock for initialization
         self._initialized = False # Flag to track initialization attempt
-        self._last_temp = DUMMY_TEMP_CELSIUS # Initialize with dummy values
-        self._last_humidity = DUMMY_HUMIDITY_PERCENT
+        self._last_temp = None # Initialize with None
+        self._last_humidity = None
 
         # Removed forced dummy mode logic.
 
@@ -182,7 +182,7 @@ class DHT22Sensor:
 
     def start_background_initialization(self):
         """Starts the hardware initialization in a background thread."""
-        if not self._initialized and not self.is_dummy:
+        if not self._initialized:
             init_thread = threading.Thread(target=self._initialize_hardware, daemon=True)
             init_thread.start()
             print(f"DHT22 background initialization thread started for GPIO {self.pin_number}.")
@@ -216,7 +216,7 @@ if __name__ == '__main__':
         # Wait a bit longer to allow initialization to potentially finish
         print("\nWaiting for potential initialization completion (max 5 seconds)...")
         for _ in range(5):
-            if sensor.dht_device or sensor.is_dummy: # Check if init finished (success or dummy)
+            if sensor.dht_device: # Check if init finished
                 print("Initialization likely complete or switched to dummy.")
                 break
             time.sleep(1)
@@ -228,7 +228,7 @@ if __name__ == '__main__':
         for i in range(5): # Reduced loop for faster testing
             temp, hum = sensor.read()
             if temp is not None and hum is not None:
-                print(f"Read {i+1}: Temp={temp:.2f}°C, Hum={hum:.2f}% (Is dummy: {sensor.is_dummy}, Device: {'OK' if sensor.dht_device else 'None'})")
+                print(f"Read {i+1}: Temp={temp:.2f}°C, Hum={hum:.2f}% (Device: {'OK' if sensor.dht_device else 'None'})")
             else:
                 print(f"Read {i+1}: Failed")
             # Respect the sensor's minimum read interval
