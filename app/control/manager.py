@@ -371,7 +371,7 @@ class ControlManager:
             print("Starting Incubator (enabling actuators)...")
             self.incubator_running = True
             # Loops are already running, changing the flag enables control (if individually enabled)
-            self._save_state() # Save state after change
+            # self._save_state() # REMOVED: Don't save state on main toggle
 
     async def stop_incubator(self, force_off=False):
             """
@@ -387,8 +387,8 @@ class ControlManager:
 
             print("Stopping Incubator (disabling actuators)...")
             self.incubator_running = False
-            if self._manager_active: # Only save state if manager is active
-                 self._save_state() # Save state after change
+            # if self._manager_active: # Only save state if manager is active
+            #      self._save_state() # REMOVED: Don't save state on main toggle
 
             # Explicitly turn off all actuators immediately
             print("Ensuring actuators are off...")
