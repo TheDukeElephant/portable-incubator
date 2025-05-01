@@ -67,7 +67,7 @@ class ControlManager:
         print("  Initializing HAL components...")
         self.dht_sensor = DHT22Sensor(DHT_PIN)
         self.dht_sensor.start_background_initialization()
-        self.o2_sensor = DFRobot_Oxygen_IIC(bus=0, addr=O2_SENSOR_ADDR) # Trying bus 0
+        self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # Assuming bus 1, adjust if needed
         self.co2_sensor = CO2Sensor()
 
         self.heater_relay = RelayOutput(HEATER_PIN, initial_value=False)
