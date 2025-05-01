@@ -7,9 +7,10 @@ logger = logging.getLogger(__name__)
 
 # Define GPIO pins (ensure these are correct for your setup)
 # Using the pins specified in the task description
-PIN_ENA = 17
-PIN_IN1 = 27
-PIN_IN2 = 22
+# Assigning new pins to avoid conflicts with Heater (17) and Humidifier (27)
+PIN_ENA = 12 # Was 17
+PIN_IN1 = 13 # Was 27
+PIN_IN2 = 19 # Was 22 (Changed for consistency, though 22 was likely free)
 
 # Control parameters
 PUMP_ON_DURATION_S = 5
