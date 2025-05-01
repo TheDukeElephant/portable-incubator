@@ -81,7 +81,6 @@ class CO2Sensor:
 
         logging.getLogger(__name__).error("Max retries reached. Returning 'NC'.")
         return "NC"
-                    continue
         logging.getLogger(__name__).debug(f"Sending read command: {self._read_cmd!r}")
         self._writer.write(self._read_cmd)
         await self._writer.drain()
@@ -100,7 +99,6 @@ class CO2Sensor:
                 return "NC"
             else:
                 await asyncio.sleep(retry_delay)
-                break
 
 
     @staticmethod
