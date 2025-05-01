@@ -73,6 +73,7 @@ class BaseLoop(ABC):
         pass
 
     async def run(self):
+        print(f"[{self.__class__.__name__}] run started. Checking active state...")
         """Starts the control loop execution."""
         if self._is_running:
             print(f"{self.__class__.__name__} is already running.")
