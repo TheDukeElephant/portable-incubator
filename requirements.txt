@@ -8,3 +8,4 @@ gpiozero==2.0          # replaces RPi.GPIO
 adafruit-circuitpython-dht
 adafruit-blinka
 pyserial_asyncio
+smbus2                   # For I2C communication (O2 Sensor, potentially others)

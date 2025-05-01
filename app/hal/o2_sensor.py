@@ -1,194 +1,157 @@
+# -*- coding: utf-8 -*
+'''!
+  @file DFRobot_Oxygen.py
+  @brief Define the basic struct of DFRobot_Oxygen class, the implementation of basic method
+  @copyright Copyright (c) 2010 DFRobot Co.Ltd (http://www.dfrobot.com)
+  @license The MIT License (MIT)
+  @author [ZhixinLiu](zhixin.liu@dfrobot.com)
+  @version V1.0
+  @date 2021-10-22
+  @url https://github.com/DFRobot/DFRobot_Oxygen
+'''
 import time
-import sys
-import random
+import smbus
+import os
 
-# --- Configuration ---
-# Set to True to force dummy mode even if a real sensor library was added later
-FORCE_DUMMY_MODE = False # Set to True to test dummy behaviour
-DUMMY_O2_PERCENT = 20.9 # Standard atmospheric O2
-DUMMY_VARIATION = 0.1 # Simulate small fluctuations
+## I2C address select
+ADDRESS_0                 = 0x70
+ADDRESS_1                 = 0x71
+ADDRESS_2                 = 0x72
+ADDRESS_3                 = 0x73
+## Register for oxygen data
+OXYGEN_DATA_REGISTER      = 0x03
+## Register for users to configure key value manually
+USER_SET_REGISTER         = 0x08
+## Register for automatically configuring key value
+AUTUAL_SET_REGISTER       = 0x09
+## Register for obtaining key value
+GET_KEY_REGISTER          = 0x0A
 
-# Attempt to import the DFRobot library
-_DFRobotOxygenSensorLib = None
-try:
-    # The exact library name might vary, adjust if necessary
-    from DFRobot_OxygenSensor import OxygenSensor as _DFRobotOxygenSensorLib
-    print("DFRobot_OxygenSensor library found.")
-except ImportError:
-    print("Warning: DFRobot_OxygenSensor library not found.")
-    print("Please install it, e.g., 'pip install DFRobot_OxygenSensor'")
-    print("O2 sensor will operate in DUMMY MODE.")
+class DFRobot_Oxygen(object):
+  ## oxygen key value
+  __key      = 0.0
+  ## Data value to be smoothed
+  __count    = 0
+  __txbuf      = [0]
+  __oxygendata = [0]*101
+  def __init__(self, bus):
+    self.i2cbus = smbus.SMBus(bus)
 
-# Default I2C bus for Raspberry Pi
-I2C_BUS = 1
-# Default I2C Address for the DFRobot Gravity O2 Sensor
-DEFAULT_O2_ADDRESS = 0x73 # Use the known default address directly
-
-class DFRobotO2Sensor:
-    """
-    Reads Oxygen concentration from a DFRobot Gravity I2C Oxygen Sensor.
-    Assumes usage of the DFRobot_OxygenSensor Python library.
-    Includes dummy mode fallback for testing or if sensor fails initialization.
-    """
-    def __init__(self, i2c_bus: int = I2C_BUS, i2c_address: int = DEFAULT_O2_ADDRESS):
-        """
-        Initializes the DFRobot O2 sensor reader.
-
-        Args:
-            i2c_bus: The I2C bus number (default is 1 for Raspberry Pi).
-            i2c_address: The I2C address of the sensor (currently not used by library?).
-        """
-        self.i2c_bus = i2c_bus
-        self.i2c_address = i2c_address # Store address, though library might not use it directly
-        self.is_dummy = False
-        self._sensor: _DFRobotOxygenSensorLib | None = None
-        self._last_o2 = DUMMY_O2_PERCENT # Initialize with dummy value
-
-        if FORCE_DUMMY_MODE or _DFRobotOxygenSensorLib is None:
-            self.is_dummy = True
-            print(f"DFRobotO2Sensor (Bus {i2c_bus}) initialized in DUMMY MODE.")
-            return
-
-        try:
-            # Initialize the sensor using the DFRobot library
-            # The library seems to only take the bus number in constructor
-            self._sensor = _DFRobotOxygenSensorLib(self.i2c_bus)
-            print(f"DFRobotO2Sensor attempting connection on I2C bus {i2c_bus}...")
-            # Perform an initial read attempt to confirm connectivity
-            success = self._read_sensor_internal()
-            if success:
-                 print(f"DFRobotO2Sensor successfully initialized. Initial reading: {self._last_o2:.2f}%")
-            else:
-                 print(f"Warning: DFRobotO2Sensor initialized, but initial read failed. Check connection/address. Falling back to DUMMY MODE.")
-                 self.is_dummy = True
-                 self._sensor = None # Ensure sensor is None if falling back
-
-        except (FileNotFoundError, OSError) as e: # Common I2C/hardware errors
-            print(f"Warning: Failed to initialize DFRobot O2 sensor on I2C bus {self.i2c_bus}: {e}. Falling back to DUMMY MODE.")
-            self.is_dummy = True
-            self._sensor = None
-        except Exception as e:
-            # Catch any other unexpected errors during init
-            print(f"Warning: Unexpected error initializing DFRobot O2 sensor: {e}. Falling back to DUMMY MODE.")
-            self.is_dummy = True
-    def read_oxygen_concentration(self) -> float:
-        """
-        Reads the oxygen concentration.
-        Returns dummy values if in dummy mode.
-        If not in dummy mode, attempts to read the sensor with retries.
-        On failure, returns the last known good value or the initial dummy value.
-
-        Returns:
-            Oxygen concentration in percent.
-        """
-        if self.is_dummy:
-            # Simulate slight variation around the dummy value
-            o2 = round(DUMMY_O2_PERCENT + random.uniform(-DUMMY_VARIATION, DUMMY_VARIATION), 2)
-            # Clamp to valid range
-            o2 = max(0.0, min(100.0, o2))
-            self._last_o2 = o2
-            # print(f"O2 Read (Dummy): {o2}%") # Optional debug
-            return o2
-
-        # --- Attempt real sensor read ---
-        success = self._read_sensor_internal()
-
-        if not success:
-             print(f"O2 Read Failed on I2C bus {self.i2c_bus}. Returning last known/dummy value: {self._last_o2:.2f}%")
-
-        # Return the latest value stored in _last_o2
-        return self._last_o2
-
-
-    def _read_sensor_internal(self) -> bool:
-        """
-        Internal helper to attempt reading the real sensor with retries.
-        Updates _last_o2 on success.
-
-        Returns:
-            True if read was successful within retries, False otherwise.
-        """
-        if not self._sensor:
-             print("O2 Internal Read Error: Sensor device not available.")
-             return False
-
-        retries = 3
-        delay_seconds = 1 # Wait between I2C retries
-
-        for attempt in range(retries):
-            try:
-                # Call the library function to get data
-                # Assuming get_oxygen_data takes internal retries (e.g., 1) and returns %
-                concentration = self._sensor.get_oxygen_data(1)
-
-                # Check for valid reading and realistic values
-                if concentration is not None and 0 <= concentration <= 100:
-                    self._last_o2 = round(concentration, 2)
-                    # print(f"O2 Read Success (Attempt {attempt+1}): {self._last_o2:.2f}%") # Debug
-                    return True # Success
-                else:
-                    print(f"O2 Read Attempt {attempt + 1}: Unrealistic/None value ({concentration}). Retrying...")
-
-            except OSError as e:
-                # Common I2C error
-                 print(f"O2 Read Attempt {attempt + 1} I/O Error: {e}. Check connection/address. Retrying...")
-            except Exception as e:
-                print(f"O2 Read Attempt {attempt + 1} Unexpected Error: {e}. Retrying...")
-
-            # Wait before the next retry
-            if attempt < retries - 1:
-                time.sleep(delay_seconds)
-
-        # If loop completes without success
-        return False
-
-    @property
-    def oxygen_concentration(self) -> float:
-        """Returns the last known oxygen concentration percentage (could be dummy)."""
-        # In this implementation, read() updates _last_o2, so just return it.
-        return self._last_o2
-
-    def close(self):
-        """Releases any resources held by the sensor object (if applicable)."""
-        # Check if the library requires an explicit close method. If not, just clear the reference.
-        if self._sensor:
-             print("Closing DFRobot O2 Sensor resources (clearing reference).")
-             # If self._sensor had a close() method, call it here:
-             # try:
-             #     self._sensor.close()
-             # except AttributeError:
-             #     pass # Library object might not have close()
-             self._sensor = None
-
-    # Remove __del__ method
-
-
-# Example Usage (for testing purposes)
-if __name__ == '__main__':
-    print("Testing DFRobotO2Sensor...")
-    # Ensure I2C is enabled: sudo raspi-config -> Interface Options -> I2C
-    # Ensure library is installed: pip install DFRobot_OxygenSensor
-    # Check sensor address: sudo i2cdetect -y 1
-
-    sensor = None
+  def get_flash(self):
+    # NOTE: Added error handling
     try:
-        sensor = DFRobotO2Sensor() # Use default bus and address
-
-        if sensor._sensor: # Check if initialization seemed okay
-            print("\nReading periodically for 20 seconds...")
-            for i in range(10):
-                o2_level = sensor.read_oxygen_concentration()
-                if o2_level is not None:
-                    print(f"Read {i+1}: O2 = {o2_level:.2f}%")
-                else:
-                    print(f"Read {i+1}: Failed")
-                time.sleep(2) # Wait between reads
+        rslt = self.read_reg(GET_KEY_REGISTER, 1)
+        if rslt == 0: # Assuming 0 means default or error, check sensor datasheet if possible
+          self.__key = (20.9 / 120.0) # Default value based on original code comment context
         else:
-            print("Sensor initialization failed, cannot perform reads.")
+          self.__key = (float(rslt[0]) / 1000.0)
+        time.sleep(0.1)
+        return True # Indicate success
+    except IOError:
+        print("Error reading key register. Sensor connected?")
+        self.__key = (20.9 / 120.0) # Use default on error
+        return False # Indicate failure
 
+  def calibrate(self, vol, mv):
+    '''!
+      @brief Calibrate sensor
+      @param vol Oxygen concentration unit vol
+      @param mv Calibrated voltage unit mv
+      @return None
+    '''
+    # NOTE: Added error handling
+    try:
+        self.__txbuf[0] = int(vol * 10)
+        if (mv < 0.000001) and (mv > (-0.000001)):
+          self.write_reg(USER_SET_REGISTER, self.__txbuf)
+        else:
+          self.__txbuf[0] = int((vol / mv) * 1000)
+          self.write_reg(AUTUAL_SET_REGISTER, self.__txbuf)
+        return True # Indicate success
+    except IOError:
+        print("Error writing calibration register. Sensor connected?")
+        return False # Indicate failure
+
+
+  def get_oxygen_data(self, collect_num):
+    '''!
+      @brief Get oxygen concentration
+      @param collectNum The number of data to be smoothed
+      @n     For example, upload 20 and take the average value of the 20 data, then return the concentration data
+      @return Oxygen concentration (float, unit vol) or "NC" (string) if sensor not connected/error.
+    '''
+    # NOTE: Modified to handle errors and return "NC"
+    if not self.get_flash(): # Try to read key, handles initial communication check
+        return "NC"
+
+    if 0 < collect_num <= 100:
+      try:
+        for num in range(collect_num, 1, -1):
+          self.__oxygendata[num-1] = self.__oxygendata[num-2]
+        # Read sensor data
+        rslt = self.read_reg(OXYGEN_DATA_REGISTER, 3)
+        # Calculate oxygen level
+        current_reading = self.__key * (float(rslt[0]) + float(rslt[1]) / 10.0 + float(rslt[2]) / 100.0)
+        self.__oxygendata[0] = current_reading
+
+        if self.__count < collect_num:
+          self.__count += 1
+        # Return the smoothed average
+        return self.get_average_num(self.__oxygendata, self.__count)
+      except IOError:
+          print("Error reading oxygen data register. Sensor connected?")
+          # Reset smoothing buffer if read fails? Optional.
+          # self.__count = 0
+          # self.__oxygendata = [0]*101
+          return "NC" # Return "NC" on communication error
+    else: # Invalid collect_num
+        print("Error: collect_num must be between 1 and 100.")
+        return "NC" # Or raise an error, returning "NC" for simplicity here
+
+  def get_average_num(self, barry, Len):
+    # NOTE: Ensure Len is not zero to avoid division by zero error
+    if Len == 0:
+        return 0.0 # Or handle as appropriate, maybe return "NC"?
+    temp = 0.0
+    for num in range (0, Len):
+      # Ensure items in barry are numbers before adding
+      if isinstance(barry[num], (int, float)):
+          temp += barry[num]
+      # else: handle potential non-numeric data if necessary
+    return (temp / float(Len))
+
+class DFRobot_Oxygen_IIC(DFRobot_Oxygen):
+  def __init__(self, bus, addr):
+    self.__addr = addr
+    # NOTE: Initialize smbus within a try-except block
+    try:
+        super(DFRobot_Oxygen_IIC, self).__init__(bus)
+        # Optional: Perform an initial read to confirm connection?
+        # self.read_reg(GET_KEY_REGISTER, 1) # Example check
+        print(f"Oxygen sensor initialized on bus {bus}, address {hex(addr)}")
     except Exception as e:
-        print(f"\nAn error occurred during testing: {e}")
-    finally:
-        if sensor:
-            sensor.close()
-        print("\nTest finished.")
+        print(f"Failed to initialize I2C bus {bus}: {e}")
+        # Handle initialization failure, maybe raise an error or set a flag
+        raise IOError(f"Failed to initialize oxygen sensor on bus {bus}, address {hex(addr)}")
+
+
+  def write_reg(self, reg, data):
+    # NOTE: Error handling added
+    try:
+        self.i2cbus.write_i2c_block_data(self.__addr, reg, data)
+    except IOError as e:
+        print(f"I2C write error to reg {hex(reg)} at addr {hex(self.__addr)}: {e}")
+        # os.system('i2cdetect -y 1') # Avoid calling os.system if possible
+        time.sleep(0.5) # Short delay before potential retry or returning error
+        raise # Re-raise the exception to be caught by calling function
+
+  def read_reg(self, reg, length):
+    # NOTE: Error handling added, removed infinite loop and os.system call
+    try:
+        rslt = self.i2cbus.read_i2c_block_data(self.__addr, reg, length)
+        return rslt
+    except IOError as e:
+        print(f"I2C read error from reg {hex(reg)} at addr {hex(self.__addr)}: {e}")
+        # os.system('i2cdetect -y 1') # Avoid calling os.system if possible
+        time.sleep(0.5) # Short delay
+        raise # Re-raise the exception to be caught by calling function
