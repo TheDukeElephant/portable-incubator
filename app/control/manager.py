@@ -556,36 +556,41 @@ class ControlManager:
         # --- END DEBUGGING ---
 
         try:
-            # 1. Load current persisted state
-            current_state = self._load_state() # This also updates self attributes as a side effect, but we reload fresh
+            # 1. Check current in-memory state
+            current_in_memory_value = getattr(self, state_key, None)
 
-            # 2. Check if change is needed
-            original_value = current_state.get(state_key, None) # Get value from loaded dict
-            if original_value == enabled:
+            if current_in_memory_value == enabled:
                 print(f"{control_name} enabled state already {enabled}.")
-                # Ensure in-memory matches persisted state even if no change needed
-                setattr(self, state_key, enabled)
                 return # No change needed
 
-            # 3. Modify the specific key in the loaded dictionary
-            current_state[state_key] = enabled
-
-            # --- DEBUGGING ---
-            print(f"[DEBUG] Modified state dict for saving: {current_state}")
-            # --- END DEBUGGING ---
-
-            # 4. Save the modified dictionary back to the file
-            self._save_state(current_state)
-            print(f"Successfully saved {state_key} = {enabled} to state file.")
-
-            # 5. *After* successful save, update the in-memory attribute
+            # 2. Update the in-memory attribute FIRST
             setattr(self, state_key, enabled)
+            print(f"Updated in-memory state: {state_key}={enabled}")
+
+            # 3. Construct the complete state dictionary FROM the current in-memory attributes
+            state_to_save = {
+                'temp_setpoint': self.temp_loop.setpoint,
+                'humidity_setpoint': self.humidity_loop.setpoint,
+                'o2_setpoint': self.o2_loop.setpoint,
+                'co2_setpoint': self.co2_loop.setpoint,
+                'incubator_running': self.incubator_running,
+                'temperature_enabled': self.temperature_enabled,
+                'humidity_enabled': self.humidity_enabled,
+                'o2_enabled': self.o2_enabled,
+                'co2_enabled': self.co2_enabled,
+                'air_pump_enabled': self.air_pump_enabled,
+            }
 
             # --- DEBUGGING ---
-            print(f"[DEBUG] Updated in-memory state: {state_key}={getattr(self, state_key)}")
+            # print(f"[DEBUG] State dict constructed for saving: {state_to_save}")
             # --- END DEBUGGING ---
 
-            # 6. Turn off actuator immediately if disabling (Kill Switch)
+            # 4. Save the updated state dictionary back to the file
+            self._save_state(state_to_save)
+            print(f"Successfully saved state file with {state_key} = {enabled}.")
+
+            # 5. Turn off actuator immediately if disabling (Kill Switch)
+            #    (In-memory state is already updated)
             if not enabled:
                 print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
                 if control_name == "temperature":
