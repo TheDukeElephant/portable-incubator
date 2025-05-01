@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 import json
 import os
@@ -51,6 +52,7 @@ TEMP_PID_D = 1.0
 HUMIDITY_HYSTERESIS = 4.0
 
 class ControlManager:
+    _logger = logging.getLogger(__name__)
     """
     Orchestrates the initialization and execution of all hardware components,
     control loops, and data logging for the incubator.
@@ -577,15 +579,35 @@ class ControlManager:
             if not enabled:
                 print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
                 if control_name == "temperature":
-                    self.heater_relay.off()
+                    self._logger.info("Attempting to turn off heater relay.")
+                    try:
+                        self.heater_relay.off()
+                        self._logger.info("Heater relay turned off successfully.")
+                    except Exception as e:
+                        self._logger.error(f"Failed to turn off heater relay: {e}", exc_info=True)
                     self.temp_loop.pid.reset() # Reset PID on disable
                 elif control_name == "humidity":
-                    self.humidifier_relay.off()
+                    self._logger.info("Attempting to turn off humidifier relay.")
+                    try:
+                        self.humidifier_relay.off()
+                        self._logger.info("Humidifier relay turned off successfully.")
+                    except Exception as e:
+                        self._logger.error(f"Failed to turn off humidifier relay: {e}", exc_info=True)
                 elif control_name == "o2":
-                    self.argon_valve_relay.off()
+                    self._logger.info("Attempting to turn off argon valve relay.")
+                    try:
+                        self.argon_valve_relay.off()
+                        self._logger.info("Argon valve relay turned off successfully.")
+                    except Exception as e:
+                        self._logger.error(f"Failed to turn off argon valve relay: {e}", exc_info=True)
                 elif control_name == "co2":
                     if self.co2_loop.vent_relay:
-                        self.co2_loop.vent_relay.off()
+                        self._logger.info("Attempting to turn off vent relay.")
+                        try:
+                            self.co2_loop.vent_relay.off()
+                            self._logger.info("Vent relay turned off successfully.")
+                        except Exception as e:
+                            self._logger.error(f"Failed to turn off vent relay: {e}", exc_info=True)
                     # Reset the CO2 loop's internal state if needed
                     if hasattr(self.co2_loop, 'reset_control'): # Check if method exists
                          self.co2_loop.reset_control()
