@@ -26,6 +26,13 @@
             <!-- Temperature -->
             <div class="status-item">
                 <h3>Temperature</h3>
+<div class="control-enable-switch">
+                    <label class="switch">
+                        <input type="checkbox" id="temp-enable-switch" data-control="temperature">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="switch-label">Control Loop</span>
+                </div>
                 <span class="value" id="temp-current">--</span><span class="unit"> °C</span>
                 <div class="setpoint-section">
                     Setpoint: <input type="number" step="0.1" id="temp-setpoint-input" class="setpoint-input">
@@ -41,6 +48,13 @@
             <!-- Humidity -->
             <div class="status-item">
                 <h3>Humidity</h3>
+<div class="control-enable-switch">
+                    <label class="switch">
+                        <input type="checkbox" id="hum-enable-switch" data-control="humidity">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="switch-label">Control Loop</span>
+                </div>
                 <span class="value" id="hum-current">--</span><span class="unit"> %</span>
                  <div class="setpoint-section">
                     Setpoint: <input type="number" step="0.5" id="hum-setpoint-input" class="setpoint-input">
@@ -56,6 +70,13 @@
             <!-- Oxygen -->
             <div class="status-item">
                 <h3>Oxygen</h3>
+<div class="control-enable-switch">
+                    <label class="switch">
+                        <input type="checkbox" id="o2-enable-switch" data-control="o2">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="switch-label">Control Loop</span>
+                </div>
                 <span class="value" id="o2-current">--</span><span class="unit"> %</span>
                  <div class="setpoint-section">
                     Setpoint: <input type="number" step="0.1" id="o2-setpoint-input" class="setpoint-input">
@@ -71,6 +92,13 @@
             <!-- CO2 -->
             <div class="status-item">
                 <h3>CO2</h3>
+<div class="control-enable-switch">
+                    <label class="switch">
+                        <input type="checkbox" id="co2-enable-switch" data-control="co2">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="switch-label">Control Loop</span>
+                </div>
                 <span class="value" id="co2-current">--</span><span class="unit"> %</span>
                  <div class="setpoint-section">
                     Setpoint: <input type="number" step="0.1" min="0" max="10" id="co2-setpoint-input" class="setpoint-input">

@@ -108,15 +108,15 @@ def ui():
     # Pass the duration map to the template
     return render_template("dashboard.html", duration_options=DURATION_MAP)
 
-@main_bp.route("/status") # Renamed from /telemetry for clarity
+# --- Modified /status endpoint ---
+@main_bp.route("/api/status") # Changed route prefix to /api for consistency
 def status():
-    """Returns the current status of the incubator."""
+    """Returns the current status of the incubator, including enabled states."""
     current_status = manager.get_status()
-    # Ensure humidity is included in the response
-    humidity = current_status.get("humidity", "NC")
-    return jsonify({**current_status, "humidity": humidity})
+    # The manager.get_status() now includes all necessary fields, including enabled states.
+    return jsonify(current_status)
 
-@main_bp.route("/setpoints", methods=["PUT"])
+@main_bp.route("/api/setpoints", methods=["PUT"]) # Changed route prefix to /api
 def setpoints():
     """Updates the setpoints for control loops."""
     data = request.json
@@ -139,9 +139,48 @@ def setpoints():
     manager.update_setpoints(valid_setpoints)
     return jsonify({"ok": True, "updated_setpoints": valid_setpoints})
 
+# --- NEW: Endpoints for getting/setting individual control states ---
+ALLOWED_CONTROL_NAMES = {"temperature", "humidity", "o2", "co2"}
+
+@main_bp.route("/api/control/<string:control_name>/state", methods=["GET"])
+def get_control_state(control_name):
+    """Gets the enabled state (True/False) for a specific control loop."""
+    if control_name not in ALLOWED_CONTROL_NAMES:
+        return jsonify({"ok": False, "error": f"Invalid control name: {control_name}. Allowed: {list(ALLOWED_CONTROL_NAMES)}"}), 404
+
+    state = manager.get_control_state(control_name)
+    if state is None:
+         # This shouldn't happen if control_name is validated, but good practice
+         return jsonify({"ok": False, "error": f"Could not retrieve state for {control_name}"}), 500
+
+    return jsonify({"ok": True, "control": control_name, "enabled": state})
+
+@main_bp.route("/api/control/<string:control_name>/state", methods=["POST"])
+def set_control_state(control_name):
+    """Sets the enabled state (True/False) for a specific control loop."""
+    if control_name not in ALLOWED_CONTROL_NAMES:
+        return jsonify({"ok": False, "error": f"Invalid control name: {control_name}. Allowed: {list(ALLOWED_CONTROL_NAMES)}"}), 404
+
+    data = request.json
+    if not data or 'enabled' not in data or not isinstance(data['enabled'], bool):
+        return jsonify({"ok": False, "error": "Invalid JSON data. Required format: {'enabled': true/false}"}), 400
+
+    enabled_value = data['enabled']
+
+    # Set the state using the manager's method (synchronous)
+    manager.set_control_state(control_name, enabled_value)
+
+    # Optionally, trigger a WebSocket update immediately after changing state
+    # This requires access to the WebSocket handling logic or a shared event queue
+    # For simplicity now, the regular WebSocket stream will pick up the change.
+
+    return jsonify({"ok": True, "control": control_name, "enabled": enabled_value})
+# --- End NEW Endpoints ---
+
+
 @main_bp.route("/download_log")
 def download_log():
-    """Downloads the logged data as a CSV file, optionally filtered by duration."""
+    # ... (download_log implementation remains the same) ...
     global _async_loop
     if not _async_loop or not _async_loop.is_running():
          return "Error: Background processing loop not running.", 500

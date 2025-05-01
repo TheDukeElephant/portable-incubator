@@ -100,8 +100,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
                  self._argon_valve_on = False
             return # Skip control logic if sensor reading is invalid
 
-        # --- Check if incubator is running ---
-        # Convert to float *after* checking for "NC"
+        # --- Convert to float *after* checking for "NC" ---
         try:
             current_o2_float = float(self.current_value)
         except ValueError:
@@ -112,14 +111,18 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
                  self._argon_valve_on = False
             return
 
-        if not self.manager.incubator_running:
-            # If stopped, ensure Argon valve is off and skip logic
+        # --- Check if incubator is running AND this specific loop is enabled ---
+        if not self.manager.incubator_running or not self.manager.o2_enabled:
+            # If stopped or disabled, ensure Argon valve is off and skip logic
             if self._argon_valve_on:
                 self.argon_valve_relay.off()
                 self._argon_valve_on = False
-                print("Incubator stopped: Turning Argon valve OFF.")
+                if not self.manager.incubator_running:
+                    print("Incubator stopped: Turning Argon valve OFF.")
+                else: # Must be disabled
+                    print("O2 control disabled: Turning Argon valve OFF.")
             return
-        # --- Incubator is running, proceed with control ---
+        # --- Incubator is running and O2 control is enabled, proceed ---
 
         # Threshold Logic: Turn Argon ON if O2 is strictly greater than setpoint
         # Use the validated float value for comparison
@@ -180,8 +183,8 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
     @property
     def argon_valve_is_on(self) -> bool:
         """Returns True if the Argon valve relay is currently commanded ON."""
-         # Reflect the actual state based on incubator running status as well
-        return self._argon_valve_on and self.manager.incubator_running
+         # Reflect the actual state based on incubator running AND enabled status
+        return self._argon_valve_on and self.manager.incubator_running and self.manager.o2_enabled
 
     def get_status(self) -> dict:
         """Returns the current status of the O2 loop."""

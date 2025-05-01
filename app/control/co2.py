@@ -89,19 +89,22 @@ class CO2Loop(BaseLoop):
                 self._vent_start_time = None
             return # Skip control logic if sensor read failed or was invalid
 
-        # --- Check if incubator is running ---
-        if not self.manager.incubator_running:
-            # If stopped, ensure vent is off and skip logic
+        # --- Check if incubator is running AND this specific loop is enabled ---
+        if not self.manager.incubator_running or not self.manager.co2_enabled:
+            # If stopped or disabled, ensure vent is off and skip logic
             if self.vent_relay and self.vent_active:
                 self.vent_relay.off()
                 self.vent_active = False
                 self._vent_start_time = None
-                print("Incubator stopped: Turning vent OFF.")
+                if not self.manager.incubator_running:
+                    print("Incubator stopped: Turning vent OFF.")
+                else: # Must be disabled
+                    print("CO2 control disabled: Turning vent OFF.")
             return
-        # --- Incubator is running, proceed with control ---
+        # --- Incubator is running and CO2 control is enabled, proceed ---
 
         # 2. Control Logic (Simple Threshold)
-        # This part is only reached if reading_successful is True and incubator is running
+        # This part is only reached if reading_successful is True and incubator is running and CO2 control is enabled
         # TODO: Add hysteresis or more advanced control if needed
         if self.vent_relay:
             # We know self.current_co2 is a valid number here
@@ -164,8 +167,8 @@ class CO2Loop(BaseLoop):
     # Add property for vent status that considers incubator state
     @property
     def is_vent_active(self) -> bool:
-        """Returns True if the vent relay is currently commanded ON and incubator is running."""
-        # Ensure vent_active is False if incubator isn't running
-        if not self.manager.incubator_running:
+        """Returns True if the vent relay is currently commanded ON, incubator is running, and CO2 control is enabled."""
+        # Ensure vent_active is False if incubator isn't running or CO2 control is disabled
+        if not self.manager.incubator_running or not self.manager.co2_enabled:
             return False
         return self.vent_active

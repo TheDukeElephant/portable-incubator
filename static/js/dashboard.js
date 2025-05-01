@@ -1,6 +1,10 @@
 const wsStatusDiv = document.getElementById('ws-status');
 const errorDiv = document.getElementById('error-message');
 const incubatorToggleButton = document.getElementById('incubator-toggle-button'); // Added button reference
+const tempEnableSwitch = document.getElementById('temp-enable-switch');
+const humEnableSwitch = document.getElementById('hum-enable-switch');
+const o2EnableSwitch = document.getElementById('o2-enable-switch');
+const co2EnableSwitch = document.getElementById('co2-enable-switch');
 const MAX_DATA_POINTS = 50; // Approx 50 seconds if data comes every second
 
 // Chart instances and data storage
@@ -155,6 +159,10 @@ function updateUI(data) {
          tempInput.value = data.temp_setpoint.toFixed(2);
     }
     updateChartData('temperature', data.temperature); // Update chart data
+    // Update Temperature Enable Switch state (only if element exists and data is present)
+    if (tempEnableSwitch && data.temperature_enabled !== undefined && document.activeElement !== tempEnableSwitch) {
+        tempEnableSwitch.checked = data.temperature_enabled;
+    }
 
 
     // Humidity
@@ -172,6 +180,10 @@ function updateUI(data) {
          humInput.value = data.humidity_setpoint.toFixed(1);
     }
     updateChartData('humidity', data.humidity); // Update chart data
+    // Update Humidity Enable Switch state
+    if (humEnableSwitch && data.humidity_enabled !== undefined && document.activeElement !== humEnableSwitch) {
+        humEnableSwitch.checked = data.humidity_enabled;
+    }
 
     // Oxygen
     document.getElementById('o2-current').textContent = data.o2 !== null ? data.o2.toFixed(2) : 'NC';
@@ -182,6 +194,10 @@ function updateUI(data) {
          o2Input.value = data.o2_setpoint.toFixed(1);
     }
     updateChartData('o2', data.o2); // Update chart data
+    // Update O2 Enable Switch state
+    if (o2EnableSwitch && data.o2_enabled !== undefined && document.activeElement !== o2EnableSwitch) {
+        o2EnableSwitch.checked = data.o2_enabled;
+    }
 
     // CO2
     const co2_ppm = data.co2_ppm;
@@ -198,6 +214,10 @@ function updateUI(data) {
     }
     // Update chart data with the current CO2 percentage to match the Y-axis
     updateChartData('co2', co2_percentage);
+    // Update CO2 Enable Switch state
+    if (co2EnableSwitch && data.co2_enabled !== undefined && document.activeElement !== co2EnableSwitch) {
+        co2EnableSwitch.checked = data.co2_enabled;
+    }
 
     // Update Incubator State Button
     if (incubatorToggleButton) {
@@ -286,6 +306,58 @@ function updateSetpoints() {
 // --- Incubator State Toggle Function ---
 function toggleIncubatorState() {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
+// --- Control Loop Enable/Disable Toggle Function ---
+function handleControlToggle(event) {
+    const switchElement = event.target;
+    const controlName = switchElement.dataset.control; // Get 'temperature', 'humidity', etc.
+    const newState = switchElement.checked; // true if checked (enabled), false if unchecked (disabled)
+
+    if (!controlName) {
+        console.error("Could not determine control name for switch:", switchElement);
+        displayError("Internal error: Could not identify control switch.");
+        // Revert visual state just in case
+        switchElement.checked = !newState;
+        return;
+    }
+
+    console.log(`Toggling control loop '${controlName}' to state: ${newState}`);
+    displayError(''); // Clear previous errors
+    switchElement.disabled = true; // Disable switch during API call
+
+    fetch(`/api/control/${controlName}/state`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled: newState }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            // If response is not OK, try to parse error message, otherwise throw generic error
+            return response.json().then(errData => {
+                throw new Error(errData.error || `HTTP error! status: ${response.status}`);
+            }).catch(() => { // Catch if parsing error JSON fails
+                throw new Error(`HTTP error! status: ${response.status}`);
+            });
+        }
+        return response.json(); // Parse successful response
+    })
+    .then(data => {
+        console.log(`Control loop '${controlName}' state updated successfully:`, data);
+        // Success! The switch state is already visually correct.
+        // The next WebSocket update should confirm this state anyway.
+    })
+    .catch((error) => {
+        console.error(`Error updating control loop '${controlName}' state:`, error);
+        displayError(`Failed to update ${controlName} state: ${error.message}`);
+        // Revert the switch's visual state because the API call failed
+        switchElement.checked = !newState;
+    })
+    .finally(() => {
+        // Re-enable the switch regardless of success or failure
+        switchElement.disabled = false;
+    });
+}
         displayError('WebSocket is not connected. Cannot change incubator state.');
         return;
     }
@@ -316,6 +388,13 @@ if (incubatorToggleButton) {
 } else {
     console.error("Incubator toggle button not found!");
 }
+
+// Add event listeners for control enable/disable switches
+if (tempEnableSwitch) tempEnableSwitch.addEventListener('change', handleControlToggle);
+if (humEnableSwitch) humEnableSwitch.addEventListener('change', handleControlToggle);
+if (o2EnableSwitch) o2EnableSwitch.addEventListener('change', handleControlToggle);
+if (co2EnableSwitch) co2EnableSwitch.addEventListener('change', handleControlToggle);
+
 
 // --- Log Download Function ---
 function downloadLogWithDuration() {

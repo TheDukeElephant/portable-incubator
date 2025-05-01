@@ -54,14 +54,21 @@ class ControlManager:
     Orchestrates the initialization and execution of all hardware components,
     control loops, and data logging for the incubator.
     Control loops run continuously, but actuators are enabled/disabled
-    based on the `incubator_running` state.
+    based on the `incubator_running` state AND individual control enabled states.
     """
     def __init__(self, db_path: str = "incubator_log.db"):
         print("Initializing Control Manager...")
         self._db_path = db_path
         self._running_tasks: List[asyncio.Task] = []
         self._manager_active = False # Is the manager itself initialized and running tasks?
-        self.incubator_running = False # Are the actuators allowed to run?
+        self.incubator_running = False # Are the actuators allowed to run (global switch)?
+
+        # --- NEW: Individual Control Enabled States ---
+        self.temperature_enabled = True
+        self.humidity_enabled = True
+        self.o2_enabled = True
+        self.co2_enabled = True
+        # ---------------------------------------------
 
         # 1. Initialize HAL Components
         print("  Initializing HAL components...")
@@ -116,18 +123,24 @@ class ControlManager:
 
         print("Control Manager Initialized (Loops not started yet).")
 
-        # Load initial state from file
+        # Load initial state from file (will load enabled states too)
         self._load_state()
 
 
     def _save_state(self):
-        """Saves the current setpoints and running state to a JSON file."""
+        """Saves the current setpoints, running state, and enabled states to a JSON file."""
         state = {
             'temp_setpoint': self.temp_loop.setpoint,
             'humidity_setpoint': self.humidity_loop.setpoint,
             'o2_setpoint': self.o2_loop.setpoint,
             'co2_setpoint': self.co2_loop.setpoint,
             'incubator_running': self.incubator_running,
+            # --- NEW: Save Enabled States ---
+            'temperature_enabled': self.temperature_enabled,
+            'humidity_enabled': self.humidity_enabled,
+            'o2_enabled': self.o2_enabled,
+            'co2_enabled': self.co2_enabled,
+            # ---------------------------------
         }
         try:
             with open(STATE_FILE_PATH, 'w') as f:
@@ -139,7 +152,7 @@ class ControlManager:
             print(f"Unexpected error saving state: {e}")
 
     def _load_state(self):
-        """Loads setpoints and running state from JSON file if it exists."""
+        """Loads setpoints, running state, and enabled states from JSON file if it exists."""
         if not os.path.exists(STATE_FILE_PATH):
             print(f"State file {STATE_FILE_PATH} not found. Using default values.")
             # Ensure initial save reflects defaults if file doesn't exist
@@ -162,15 +175,21 @@ class ControlManager:
                     self.o2_loop.setpoint = float(state['o2_setpoint'])
                 if 'co2_setpoint' in state and isinstance(state['co2_setpoint'], (int, float)):
                     self.co2_loop.setpoint = float(state['co2_setpoint'])
+                # Global Running State
                 if 'incubator_running' in state and isinstance(state['incubator_running'], bool):
-                     # Set the initial running state based on loaded value.
-                     # The start() method will respect this initial state.
-                     # Note: start() currently forces incubator_running=False initially,
-                     # this loaded value might be overridden unless start() logic is adjusted.
-                     # For now, we load it, but start() behavior takes precedence on initial startup.
-                     # A better approach might be to pass this loaded state to start().
-                     # Let's keep it simple for now and load it here. The user can then start it.
                      self.incubator_running = state['incubator_running']
+
+                # --- NEW: Load Enabled States ---
+                if 'temperature_enabled' in state and isinstance(state['temperature_enabled'], bool):
+                    self.temperature_enabled = state['temperature_enabled']
+                if 'humidity_enabled' in state and isinstance(state['humidity_enabled'], bool):
+                    self.humidity_enabled = state['humidity_enabled']
+                if 'o2_enabled' in state and isinstance(state['o2_enabled'], bool):
+                    self.o2_enabled = state['o2_enabled']
+                if 'co2_enabled' in state and isinstance(state['co2_enabled'], bool):
+                    self.co2_enabled = state['co2_enabled']
+                # ---------------------------------
+
                 print("Successfully applied loaded state.")
             else:
                  print(f"Invalid state format in {STATE_FILE_PATH}. Using default values.")
@@ -188,14 +207,20 @@ class ControlManager:
 
 
     async def _logging_task(self):
-        """Background task to periodically log data when the incubator is running."""
+        """Background task to periodically log data."""
         print("Data logging task started.")
         while self._manager_active: # Keep task alive while manager is active
             try:
                 # Log data regardless of incubator_running state, but log the state itself
-                status = self.get_status() # Get full status including incubator_running
+                status = self.get_status() # Get full status including enabled states
                 log_data = {
                     'incubator_running': status.get('incubator_running'),
+                    # --- NEW: Log Enabled States ---
+                    'temperature_enabled': status.get('temperature_enabled'),
+                    'humidity_enabled': status.get('humidity_enabled'),
+                    'o2_enabled': status.get('o2_enabled'),
+                    'co2_enabled': status.get('co2_enabled'),
+                    # ---------------------------------
                     'temperature': status.get('temperature'),
                     'humidity': status.get('humidity'),
                     'o2': status.get('o2'),
@@ -204,13 +229,13 @@ class ControlManager:
                     'humidity_setpoint': status.get('humidity_setpoint'),
                     'o2_setpoint': status.get('o2_setpoint'),
                     'co2_setpoint': status.get('co2_setpoint_ppm'),
-                    # Log actuator states as reported by loops (which consider incubator_running)
+                    # Log actuator states as reported by loops (which consider incubator_running AND enabled flags)
                     'heater_on': status.get('heater_on'),
                     'humidifier_on': status.get('humidifier_on'),
                     'argon_valve_on': status.get('argon_valve_on'),
                     'vent_active': status.get('vent_active'),
-                    'air_pump_on': status.get('air_pump_on'), # Add air pump status
-                    'air_pump_speed': status.get('air_pump_speed'), # Add air pump speed
+                    'air_pump_on': status.get('air_pump_on'),
+                    'air_pump_speed': status.get('air_pump_speed'),
                 }
                 await self.logger.log_data(log_data)
                 # print("Logged data point.") # Debugging
@@ -242,7 +267,7 @@ class ControlManager:
             await self.logger.initialize()
 
             self._manager_active = True
-            # Start control loops immediately. They will run but respect incubator_running flag.
+            # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
             self._running_tasks = [
                 asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
                 asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
@@ -251,9 +276,9 @@ class ControlManager:
                 asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
                 asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
             ]
-            # Incubator starts in the 'stopped' state (actuators off)
-            self.incubator_running = False
-            print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator initially STOPPED.")
+            # Incubator starts in the 'stopped' state (actuators off) based on loaded state or default
+            # self.incubator_running = False # This is now handled by _load_state or defaults
+            print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator running: {self.incubator_running}. Enabled states loaded.")
 
         except Exception as e:
             print(f"Error starting Control Manager: {e}")
@@ -271,7 +296,8 @@ class ControlManager:
 
         print("Stopping Control Manager...")
         self._manager_active = False # Signal logger and loops to stop checking state
-        self.incubator_running = False # Ensure state is off
+        # self.incubator_running = False # Don't force incubator off on manager stop, preserve state
+        await self.stop_incubator(force_off=True) # Ensure actuators are off when manager stops
 
         # Stop control loops (calls their internal stop methods)
         # These tasks should exit gracefully now that _manager_active is False in BaseLoop check
@@ -316,7 +342,7 @@ class ControlManager:
 
 
     async def start_incubator(self):
-        """Allows actuators to run based on control loop logic."""
+        """Allows actuators to run based on control loop logic and enabled flags."""
         if not self._manager_active:
             print("Cannot start incubator: Manager not active.")
             return
@@ -326,21 +352,25 @@ class ControlManager:
 
         print("Starting Incubator (enabling actuators)...")
         self.incubator_running = True
-        # Loops are already running, just changing the flag enables control
+        # Loops are already running, changing the flag enables control (if individually enabled)
         self._save_state() # Save state after change
 
-    async def stop_incubator(self):
-        """Disallows actuators from running, turning them off."""
-        if not self._manager_active:
+    async def stop_incubator(self, force_off=False):
+        """
+        Disallows actuators from running, turning them off.
+        If force_off is True, turns off actuators even if manager is stopping.
+        """
+        if not self._manager_active and not force_off:
             print("Cannot stop incubator: Manager not active.")
             return
-        if not self.incubator_running:
+        if not self.incubator_running and not force_off:
             # print("Incubator already stopped.") # Optional print
             return
 
         print("Stopping Incubator (disabling actuators)...")
         self.incubator_running = False
-        self._save_state() # Save state after change
+        if self._manager_active: # Only save state if manager is active
+             self._save_state() # Save state after change
 
         # Explicitly turn off all actuators immediately
         print("Ensuring actuators are off...")
@@ -366,20 +396,26 @@ class ControlManager:
         status = {
             "timestamp": time.time(),
             "incubator_running": self.incubator_running, # Report the overall state flag
+            # --- NEW: Report Enabled States ---
+            "temperature_enabled": self.temperature_enabled,
+            "humidity_enabled": self.humidity_enabled,
+            "o2_enabled": self.o2_enabled,
+            "co2_enabled": self.co2_enabled,
+            # ---------------------------------
             "temperature": temp_status.get("temperature"),
             "temp_setpoint": temp_status.get("setpoint"),
-            "heater_on": temp_status.get("heater_on"), # This now reflects incubator_running via loop's property
-            "humidity": hum_status.get("humidity"),  # Ensure this handles float or "NC"
+            "heater_on": temp_status.get("heater_on"), # This should reflect both flags via loop's property
+            "humidity": hum_status.get("humidity"),
             "humidity_setpoint": hum_status.get("setpoint"),
-            "humidifier_on": hum_status.get("humidifier_on"), # This now reflects incubator_running via loop's property
+            "humidifier_on": hum_status.get("humidifier_on"), # This should reflect both flags via loop's property
             "o2": o2_status.get("o2"),
             "o2_setpoint": o2_status.get("setpoint"),
-            "argon_valve_on": o2_status.get("argon_valve_on"), # This now reflects incubator_running via loop's property
+            "argon_valve_on": o2_status.get("argon_valve_on"), # This should reflect both flags via loop's property
             "co2_ppm": co2_status.get("co2_ppm"),
             "co2_setpoint_ppm": co2_status.get("setpoint_ppm"),
-            "vent_active": co2_status.get("vent_active"), # This now reflects incubator_running via loop's property
-            "air_pump_on": air_pump_status.get("pump_on", False), # Add air pump status
-            "air_pump_speed": air_pump_status.get("speed_percent", 0), # Add air pump speed
+            "vent_active": co2_status.get("vent_active"), # This should reflect both flags via loop's property
+            "air_pump_on": air_pump_status.get("pump_on", False),
+            "air_pump_speed": air_pump_status.get("speed_percent", 0),
         }
         return status
 
@@ -388,22 +424,81 @@ class ControlManager:
         Updates the setpoints for the control loops.
         """
         print(f"Updating setpoints: {setpoints}")
+        changed = False
         try:
-            if 'temperature' in setpoints:
+            if 'temperature' in setpoints and self.temp_loop.setpoint != float(setpoints['temperature']):
                 self.temp_loop.setpoint = float(setpoints['temperature'])
-            if 'humidity' in setpoints:
+                changed = True
+            if 'humidity' in setpoints and self.humidity_loop.setpoint != float(setpoints['humidity']):
                 self.humidity_loop.setpoint = float(setpoints['humidity'])
-            if 'o2' in setpoints:
+                changed = True
+            if 'o2' in setpoints and self.o2_loop.setpoint != float(setpoints['o2']):
                 self.o2_loop.setpoint = float(setpoints['o2'])
-            if 'co2' in setpoints:
+                changed = True
+            if 'co2' in setpoints and self.co2_loop.setpoint != float(setpoints['co2']):
                 self.co2_loop.setpoint = float(setpoints['co2'])
+                changed = True
         except ValueError as e:
             print(f"Error updating setpoints: Invalid value type - {e}")
         except Exception as e:
             print(f"Unexpected error updating setpoints: {e}")
         finally:
-            # Save state regardless of errors in applying specific values
-            self._save_state()
+            # Save state only if a value actually changed
+            if changed:
+                self._save_state()
+
+    # --- NEW: Getter/Setter Methods for Enabled States ---
+    def get_control_state(self, control_name: str) -> Optional[bool]:
+        """Gets the enabled state of a specific control loop."""
+        if control_name == "temperature":
+            return self.temperature_enabled
+        elif control_name == "humidity":
+            return self.humidity_enabled
+        elif control_name == "o2":
+            return self.o2_enabled
+        elif control_name == "co2":
+            return self.co2_enabled
+        else:
+            print(f"Warning: Unknown control name '{control_name}' in get_control_state")
+            return None
+
+    def set_control_state(self, control_name: str, enabled: bool):
+        """Sets the enabled state of a specific control loop and saves the state."""
+        state_changed = False
+        original_state = None
+
+        if control_name == "temperature":
+            original_state = self.temperature_enabled
+            self.temperature_enabled = enabled
+            state_changed = original_state != enabled
+            if not enabled: self.heater_relay.off() # Ensure actuator is off immediately
+        elif control_name == "humidity":
+            original_state = self.humidity_enabled
+            self.humidity_enabled = enabled
+            state_changed = original_state != enabled
+            if not enabled: self.humidifier_relay.off() # Ensure actuator is off immediately
+        elif control_name == "o2":
+            original_state = self.o2_enabled
+            self.o2_enabled = enabled
+            state_changed = original_state != enabled
+            if not enabled: self.argon_valve_relay.off() # Ensure actuator is off immediately
+        elif control_name == "co2":
+            original_state = self.co2_enabled
+            self.co2_enabled = enabled
+            state_changed = original_state != enabled
+            if not enabled and self.co2_loop.vent_relay:
+                 self.co2_loop.vent_relay.off() # Ensure actuator is off immediately
+        else:
+            print(f"Error: Unknown control name '{control_name}' in set_control_state")
+            return # Don't save state if name is invalid
+
+        if state_changed:
+            print(f"Set {control_name} enabled state to: {enabled}")
+            self._save_state() # Save the updated state
+        # else:
+        #     print(f"{control_name} enabled state already {enabled}.") # Optional print
+
+    # ----------------------------------------------------
 
     async def __aenter__(self):
         """Allows using 'async with ControlManager(...)' syntax."""

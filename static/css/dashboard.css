@@ -283,3 +283,85 @@ h1 {
 .button-on:hover {
     background-color: #f85a5a; /* Slightly lighter red on hover */
 }
+/* --- Control Enable Toggle Switch --- */
+.control-enable-switch {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px; /* Space below the switch */
+    margin-top: 5px; /* Space above the switch */
+}
+
+.switch-label {
+    margin-left: 10px;
+    font-size: 0.9em;
+    color: var(--text-muted-color);
+}
+
+/* The switch - the box around the slider */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px; /* Smaller width */
+  height: 24px; /* Smaller height */
+}
+
+/* Hide default HTML checkbox */
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* The slider */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border-color); /* Default off color */
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px; /* Smaller circle */
+  width: 18px; /* Smaller circle */
+  left: 3px; /* Adjust position */
+  bottom: 3px; /* Adjust position */
+  background-color: var(--text-color); /* Circle color */
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: var(--primary-accent); /* On color */
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px var(--primary-accent);
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(26px); /* Move distance */
+  -ms-transform: translateX(26px); /* Move distance */
+  transform: translateX(26px); /* Move distance */
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 24px; /* Fully rounded */
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+/* Disabled state */
+input:disabled + .slider {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
