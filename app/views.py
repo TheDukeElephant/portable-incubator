@@ -124,7 +124,7 @@ def setpoints():
         return jsonify({"ok": False, "error": "No JSON data received"}), 400
 
     valid_setpoints = {}
-    allowed_keys = ['temperature', 'humidity', 'o2'] # Add 'co2' later
+    allowed_keys = ['temperature', 'humidity', 'o2', 'co2'] # Added 'co2'
     try:
         for key in allowed_keys:
             if key in data:
