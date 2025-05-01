@@ -37,7 +37,8 @@ class L298NMotor:
             # Initialize gpiozero Motor
             # We map IN1 to 'forward' and IN2 to 'backward'.
             # Enable pin is used for PWM speed control.
-            self.motor = Motor(forward=pin_in1, backward=pin_in2, enable=pin_ena, pwm=True)
+            # Initialize gpiozero Motor, explicitly disabling PWM as it's not supported/needed for the pump
+            self.motor = Motor(forward=pin_in1, backward=pin_in2, enable=pin_ena, pwm=False)
             logger.info(f"L298NMotor (gpiozero) initialized on ENA={pin_ena}, IN1={pin_in1}, IN2={pin_in2}")
         except Exception as e:
             logger.error(f"Failed to initialize gpiozero Motor: {e}", exc_info=True)
