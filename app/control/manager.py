@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, List
 
 # Hardware Abstraction Layer Imports
 from ..hal.dht_sensor import DHT22Sensor
-from ..hal.o2_sensor import DFRobotO2Sensor
+from ..hal.o2_sensor import DFRobot_Oxygen_IIC
 from ..hal.relay_output import RelayOutput
 from ..hal.co2_sensor import CO2Sensor # Import the new dummy sensor
 
@@ -67,7 +67,7 @@ class ControlManager:
         print("  Initializing HAL components...")
         self.dht_sensor = DHT22Sensor(DHT_PIN)
         self.dht_sensor.start_background_initialization()
-        self.o2_sensor = DFRobotO2Sensor(i2c_address=O2_SENSOR_ADDR)
+        self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # Assuming bus 1, adjust if needed
         self.co2_sensor = CO2Sensor()
 
         self.heater_relay = RelayOutput(HEATER_PIN, initial_value=False)
