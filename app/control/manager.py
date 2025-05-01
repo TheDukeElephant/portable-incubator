@@ -555,104 +555,119 @@ class ControlManager:
         print(f"[DEBUG] Attempting set_control_state('{control_name}', {enabled}). Current in-memory: {state_key}={getattr(self, state_key, 'N/A')}")
         # --- END DEBUGGING ---
 
-        try:
-            # 1. Check current in-memory state
-            current_in_memory_value = getattr(self, state_key, None)
+        with self._state_lock: # Acquire lock for the entire read-modify-write operation
+            try:
+                # 1. Check current in-memory state (inside lock)
+                current_in_memory_value = getattr(self, state_key, None)
 
-            if current_in_memory_value == enabled:
-                print(f"{control_name} enabled state already {enabled}.")
-                return # No change needed
+                if current_in_memory_value == enabled:
+                    print(f"{control_name} enabled state already {enabled}.")
+                    return # No change needed, release lock
 
-            # 2. Update the in-memory attribute FIRST
-            setattr(self, state_key, enabled)
-            print(f"Updated in-memory state: {state_key}={enabled}")
+                # 2. Update the in-memory attribute FIRST (inside lock)
+                setattr(self, state_key, enabled)
+                print(f"Updated in-memory state: {state_key}={enabled}")
 
-            # 3. Construct the complete state dictionary FROM the current in-memory attributes
-            state_to_save = {
-                'temp_setpoint': self.temp_loop.setpoint,
-                'humidity_setpoint': self.humidity_loop.setpoint,
-                'o2_setpoint': self.o2_loop.setpoint,
-                'co2_setpoint': self.co2_loop.setpoint,
-                'incubator_running': self.incubator_running,
-                'temperature_enabled': self.temperature_enabled,
-                'humidity_enabled': self.humidity_enabled,
-                'o2_enabled': self.o2_enabled,
-                'co2_enabled': self.co2_enabled,
-                'air_pump_enabled': self.air_pump_enabled,
-            }
+                # 3. Construct the complete state dictionary FROM the current in-memory attributes (inside lock)
+                state_to_save = {
+                    'temp_setpoint': self.temp_loop.setpoint,
+                    'humidity_setpoint': self.humidity_loop.setpoint,
+                    'o2_setpoint': self.o2_loop.setpoint,
+                    'co2_setpoint': self.co2_loop.setpoint,
+                    'incubator_running': self.incubator_running,
+                    'temperature_enabled': self.temperature_enabled,
+                    'humidity_enabled': self.humidity_enabled,
+                    'o2_enabled': self.o2_enabled,
+                    'co2_enabled': self.co2_enabled,
+                    'air_pump_enabled': self.air_pump_enabled,
+                }
 
-            # --- DEBUGGING ---
-            # print(f"[DEBUG] State dict constructed for saving: {state_to_save}")
-            # --- END DEBUGGING ---
+                # 4. Save the updated state dictionary back to the file (inside lock)
+                #    Using a nested try/except specifically for the file write
+                save_error = None
+                try:
+                    with open(STATE_FILE_PATH, 'w') as f:
+                        json.dump(state_to_save, f, indent=4)
+                    print(f"Successfully saved state file with {state_key} = {enabled}.")
+                except IOError as e:
+                    save_error = e
+                    print(f"Error saving state to {STATE_FILE_PATH}: {e}")
+                except Exception as e:
+                    save_error = e
+                    print(f"Unexpected error saving state: {e}")
 
-            # 4. Save the updated state dictionary back to the file
-            self._save_state(state_to_save)
-            print(f"Successfully saved state file with {state_key} = {enabled}.")
+                if save_error:
+                     print(f"Warning: State save failed for {control_name}. In-memory state is {enabled}, but file may be outdated.")
 
-            # 5. Turn off actuator immediately if disabling (Kill Switch)
-            #    (In-memory state is already updated)
-            if not enabled:
-                print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
-                if control_name == "temperature":
-                    self._logger.info("Attempting to turn off heater relay.")
-                    try:
-                        self.heater_relay.off()
-                        self._logger.info("Heater relay turned off successfully.")
-                    except Exception as e:
-                        self._logger.error(f"Failed to turn off heater relay: {e}", exc_info=True)
-                    self.temp_loop.pid.reset() # Reset PID on disable
-                elif control_name == "humidity":
-                    self._logger.info("Attempting to turn off humidifier relay.")
-                    try:
-                        self.humidifier_relay.off()
-                        self._logger.info("Humidifier relay turned off successfully.")
-                    except Exception as e:
-                        self._logger.error(f"Failed to turn off humidifier relay: {e}", exc_info=True)
-                elif control_name == "o2":
-                    self._logger.info("Attempting to turn off argon valve relay.")
-                    try:
-                        self.argon_valve_relay.off()
-                        self._logger.info("Argon valve relay turned off successfully.")
-                    except Exception as e:
-                        self._logger.error(f"Failed to turn off argon valve relay: {e}", exc_info=True)
-                elif control_name == "co2":
-                    if self.co2_loop.vent_relay:
-                        self._logger.info("Attempting to turn off vent relay.")
+                # 5. Turn off actuator immediately if disabling (Kill Switch)
+                #    (Still inside the main try block)
+                if not enabled:
+                    # This block is indented relative to the 'if not enabled:'
+                    print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
+                    if control_name == "temperature":
+                        self._logger.info("Attempting to turn off heater relay.")
                         try:
-                            self.co2_loop.vent_relay.off()
-                            self._logger.info("Vent relay turned off successfully.")
+                            self.heater_relay.off()
+                            self._logger.info("Heater relay turned off successfully.")
                         except Exception as e:
-                            self._logger.error(f"Failed to turn off vent relay: {e}", exc_info=True)
-                    # Reset the CO2 loop's internal state if needed
-                    if hasattr(self.co2_loop, 'reset_control'): # Check if method exists
-                         self.co2_loop.reset_control()
-                    else:
-                         print(f"Warning: CO2Loop does not have a 'reset_control' method.")
-                # Correctly indented elif block
-                elif control_name == "air_pump": # NEW: Handle air pump kill switch
-                    if self.air_pump_loop and self.air_pump_loop.motor:
-                        self.air_pump_loop.motor.stop()
-                        # Optionally reset air pump loop state if needed
-                        if hasattr(self.air_pump_loop, 'reset_control'): # Check if method exists
-                            self.air_pump_loop.reset_control()
+                            self._logger.error(f"Failed to turn off heater relay: {e}", exc_info=True)
+                        self.temp_loop.pid.reset() # Reset PID on disable
+                    elif control_name == "humidity":
+                        self._logger.info("Attempting to turn off humidifier relay.")
+                        try:
+                            self.humidifier_relay.off()
+                            self._logger.info("Humidifier relay turned off successfully.")
+                        except Exception as e:
+                            self._logger.error(f"Failed to turn off humidifier relay: {e}", exc_info=True)
+                    elif control_name == "o2":
+                        self._logger.info("Attempting to turn off argon valve relay.")
+                        try:
+                            self.argon_valve_relay.off()
+                            self._logger.info("Argon valve relay turned off successfully.")
+                        except Exception as e:
+                            self._logger.error(f"Failed to turn off argon valve relay: {e}", exc_info=True)
+                    elif control_name == "co2":
+                        if self.co2_loop.vent_relay:
+                            self._logger.info("Attempting to turn off vent relay.")
+                            try:
+                                self.co2_loop.vent_relay.off()
+                                self._logger.info("Vent relay turned off successfully.")
+                            except Exception as e:
+                                self._logger.error(f"Failed to turn off vent relay: {e}", exc_info=True)
+                        # Reset the CO2 loop's internal state if needed
+                        if hasattr(self.co2_loop, 'reset_control'): # Check if method exists
+                             self.co2_loop.reset_control()
                         else:
-                            print(f"Warning: AirPumpControlLoop does not have a 'reset_control' method.")
+                             print(f"Warning: CO2Loop does not have a 'reset_control' method.")
+                    elif control_name == "air_pump": # NEW: Handle air pump kill switch
+                        if self.air_pump_loop and self.air_pump_loop.motor:
+                            self.air_pump_loop.motor.stop()
+                            # Optionally reset air pump loop state if needed
+                            if hasattr(self.air_pump_loop, 'reset_control'): # Check if method exists
+                                self.air_pump_loop.reset_control()
+                            else:
+                                print(f"Warning: AirPumpControlLoop does not have a 'reset_control' method.")
 
-        except Exception as e:
-             # Catch potential errors during load/save/update
-             print(f"Error during set_control_state for '{control_name}': {e}")
-             # Avoid changing in-memory state if persistence failed
+            # Correctly indented except block for the outer try
+            except Exception as e:
+                 # Catch potential errors during the locked operation (e.g., getattr, setattr, kill switch logic)
+                 print(f"Error during locked set_control_state for '{control_name}': {e}")
+                 # The lock will be released automatically by the 'with' statement
+                 # Consider if the in-memory state should be reverted here if an error occurred
+                 # For now, just log the error.
+
+        # Lock is released automatically when exiting the 'with' block
 
     # ----------------------------------------------------
-
+    # Corrected indentation for __aenter__ and __aexit__
     async def __aenter__(self):
-            """Allows using 'async with ControlManager(...)' syntax."""
-            await self.start()
-            return self
+        """Allows using 'async with ControlManager(...)' syntax."""
+        await self.start()
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-            """Ensures stop is called when exiting 'async with' block."""
-            await self.stop()
+        """Ensures stop is called when exiting 'async with' block."""
+        await self.stop()
 
     # Example Usage (Conceptual - requires running within an asyncio loop)
 # async def main():
