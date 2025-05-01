@@ -521,89 +521,90 @@ class ControlManager:
                 return None
 
     def set_control_state(self, control_name: str, enabled: bool):
-            """
-            Sets the enabled state of a specific control loop by loading the current state,
-            modifying it, saving it back, and then updating the in-memory state.
-            """
-            control_key_map = {
-                "temperature": "temperature_enabled",
-                "humidity": "humidity_enabled",
-                "o2": "o2_enabled",
-                "co2": "co2_enabled",
-                "air_pump": "air_pump_enabled", # NEW: Map air pump state
-            }
+        """
+        Sets the enabled state of a specific control loop by loading the current state,
+        modifying it, saving it back, and then updating the in-memory state.
+        """
+        control_key_map = {
+            "temperature": "temperature_enabled",
+            "humidity": "humidity_enabled",
+            "o2": "o2_enabled",
+            "co2": "co2_enabled",
+            "air_pump": "air_pump_enabled", # NEW: Map air pump state
+        }
 
-            if control_name not in control_key_map:
-                print(f"Error: Unknown control name '{control_name}' in set_control_state")
-                return
+        if control_name not in control_key_map:
+            print(f"Error: Unknown control name '{control_name}' in set_control_state")
+            return
 
-            state_key = control_key_map[control_name]
+        state_key = control_key_map[control_name]
+
+        # --- DEBUGGING ---
+        print(f"[DEBUG] Attempting set_control_state('{control_name}', {enabled}). Current in-memory: {state_key}={getattr(self, state_key, 'N/A')}")
+        # --- END DEBUGGING ---
+
+        try:
+            # 1. Load current persisted state
+            current_state = self._load_state() # This also updates self attributes as a side effect, but we reload fresh
+
+            # 2. Check if change is needed
+            original_value = current_state.get(state_key, None) # Get value from loaded dict
+            if original_value == enabled:
+                print(f"{control_name} enabled state already {enabled}.")
+                # Ensure in-memory matches persisted state even if no change needed
+                setattr(self, state_key, enabled)
+                return # No change needed
+
+            # 3. Modify the specific key in the loaded dictionary
+            current_state[state_key] = enabled
 
             # --- DEBUGGING ---
-            print(f"[DEBUG] Attempting set_control_state('{control_name}', {enabled}). Current in-memory: {state_key}={getattr(self, state_key, 'N/A')}")
+            print(f"[DEBUG] Modified state dict for saving: {current_state}")
             # --- END DEBUGGING ---
 
-            try:
-                # 1. Load current persisted state
-                current_state = self._load_state() # This also updates self attributes as a side effect, but we reload fresh
+            # 4. Save the modified dictionary back to the file
+            self._save_state(current_state)
+            print(f"Successfully saved {state_key} = {enabled} to state file.")
 
-                # 2. Check if change is needed
-                original_value = current_state.get(state_key, None) # Get value from loaded dict
-                if original_value == enabled:
-                    print(f"{control_name} enabled state already {enabled}.")
-                    # Ensure in-memory matches persisted state even if no change needed
-                    setattr(self, state_key, enabled)
-                    return # No change needed
+            # 5. *After* successful save, update the in-memory attribute
+            setattr(self, state_key, enabled)
 
-                # 3. Modify the specific key in the loaded dictionary
-                current_state[state_key] = enabled
+            # --- DEBUGGING ---
+            print(f"[DEBUG] Updated in-memory state: {state_key}={getattr(self, state_key)}")
+            # --- END DEBUGGING ---
 
-                # --- DEBUGGING ---
-                print(f"[DEBUG] Modified state dict for saving: {current_state}")
-                # --- END DEBUGGING ---
-
-                # 4. Save the modified dictionary back to the file
-                self._save_state(current_state)
-                print(f"Successfully saved {state_key} = {enabled} to state file.")
-
-                # 5. *After* successful save, update the in-memory attribute
-                setattr(self, state_key, enabled)
-
-                # --- DEBUGGING ---
-                print(f"[DEBUG] Updated in-memory state: {state_key}={getattr(self, state_key)}")
-                # --- END DEBUGGING ---
-
-                # 6. Turn off actuator immediately if disabling (Kill Switch)
-                if not enabled:
-                    print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
-                    if control_name == "temperature":
-                        self.heater_relay.off()
-                        self.temp_loop.pid.reset() # Reset PID on disable
-                    elif control_name == "humidity":
-                        self.humidifier_relay.off()
-                    elif control_name == "o2":
-                        self.argon_valve_relay.off()
-                    elif control_name == "co2":
-                        if self.co2_loop.vent_relay:
-                            self.co2_loop.vent_relay.off()
-                        # Reset the CO2 loop's internal state if needed
-                        if hasattr(self.co2_loop, 'reset_control'): # Check if method exists
-                             self.co2_loop.reset_control()
+            # 6. Turn off actuator immediately if disabling (Kill Switch)
+            if not enabled:
+                print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
+                if control_name == "temperature":
+                    self.heater_relay.off()
+                    self.temp_loop.pid.reset() # Reset PID on disable
+                elif control_name == "humidity":
+                    self.humidifier_relay.off()
+                elif control_name == "o2":
+                    self.argon_valve_relay.off()
+                elif control_name == "co2":
+                    if self.co2_loop.vent_relay:
+                        self.co2_loop.vent_relay.off()
+                    # Reset the CO2 loop's internal state if needed
+                    if hasattr(self.co2_loop, 'reset_control'): # Check if method exists
+                         self.co2_loop.reset_control()
+                    else:
+                         print(f"Warning: CO2Loop does not have a 'reset_control' method.")
+                # Correctly indented elif block
+                elif control_name == "air_pump": # NEW: Handle air pump kill switch
+                    if self.air_pump_loop and self.air_pump_loop.motor:
+                        self.air_pump_loop.motor.stop()
+                        # Optionally reset air pump loop state if needed
+                        if hasattr(self.air_pump_loop, 'reset_control'): # Check if method exists
+                            self.air_pump_loop.reset_control()
                         else:
-                             print(f"Warning: CO2Loop does not have a 'reset_control' method.")
-                   elif control_name == "air_pump": # NEW: Handle air pump kill switch
-                       if self.air_pump_loop and self.air_pump_loop.motor:
-                           self.air_pump_loop.motor.stop()
-                           # Optionally reset air pump loop state if needed
-                           if hasattr(self.air_pump_loop, 'reset_control'): # Check if method exists
-                               self.air_pump_loop.reset_control()
-                           else:
-                               print(f"Warning: AirPumpControlLoop does not have a 'reset_control' method.")
+                            print(f"Warning: AirPumpControlLoop does not have a 'reset_control' method.")
 
-            except Exception as e:
-                # Catch potential errors during load/save/update
-                print(f"Error during set_control_state for '{control_name}': {e}")
-                # Avoid changing in-memory state if persistence failed
+        except Exception as e:
+             # Catch potential errors during load/save/update
+             print(f"Error during set_control_state for '{control_name}': {e}")
+             # Avoid changing in-memory state if persistence failed
 
     # ----------------------------------------------------
 
