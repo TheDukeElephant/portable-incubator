@@ -190,7 +190,7 @@ function updateUI(data) {
     const co2_setpoint_ppm = data.co2_setpoint_ppm;
     const co2_setpoint_percentage = co2_setpoint_ppm !== null ? (co2_setpoint_ppm / 10000).toFixed(2) : null;
     document.getElementById('co2-setpoint-display').textContent = co2_setpoint_percentage !== null ? `${co2_setpoint_percentage}%` : '--';
-    updateRelayStatus('vent-status', data.vent_active, 'Vent');
+    updateRelayStatus('vent-status', data.vent_active, 'CO2 valve');
     const co2Input = document.getElementById('co2-setpoint-input');
     if (document.activeElement !== co2Input && co2_setpoint_percentage !== null) {
         // Update input field with percentage value
