@@ -60,12 +60,13 @@ class L298NMotor:
 
         if speed_fraction > 0:
             # For a pump, we only run forward.
-            self.motor.forward(speed=speed_fraction)
-            # logger.debug(f"Motor speed set to {speed_percent}% (Fraction: {speed_fraction})")
+            if not self.motor.pwm:
+                # Non-PWM motors only accept 0 or 1
+                self.motor.forward(speed=1)
+            else:
+                self.motor.forward(speed=speed_fraction)
         else:
             self.motor.stop()
-            # logger.debug("Motor speed set to 0%, stopping.")
-
 
     def start(self, speed_percent=None):
         """Starts the motor at the specified speed, or the last set speed."""
@@ -81,7 +82,6 @@ class L298NMotor:
 
         # Log the speed in percentage
         logger.info(f"Motor started at {int(self.current_speed * 100)}% speed.")
-
 
     def stop(self):
         """Stops the motor."""
