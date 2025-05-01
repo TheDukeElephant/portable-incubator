@@ -295,37 +295,146 @@ class ControlManager:
 
 
     async def start(self):
-            """Initializes logger, starts all control loops and the logging task."""
-            if self._manager_active:
-                print("Control Manager already started.")
-                return
+        """Initializes logger, starts all control loops and the logging task."""
+        print("[DEBUG] ControlManager.start() called. Initializing tasks...")
+        if self._manager_active:
+            print("Control Manager already started.")
+            return
+    
+        print("Starting Control Manager and background tasks...")
+        try:
+            # Initialize logger database connection
+            await self.logger.initialize()
+    
+            self._manager_active = True
+            # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
+            self._running_tasks = [
+                asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
+                asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
+                asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
+                asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
+            ]
+            # Incubator starts in the 'stopped' state (actuators off) based on loaded state or default
+            # self.incubator_running = False # This is now handled by _load_state or defaults
+            print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator running: {self.incubator_running}. Enabled states loaded.")
+    
+        except Exception as e:
+            print(f"Error starting Control Manager: {e}")
+            self._manager_active = False
+            await self.logger.close() # Ensure logger is closed if init failed
+            # Attempt cleanup if start failed partially
+            await self.stop()
+            raise # Re-raise the exception
+    
+        print("Starting Control Manager and background tasks...")
+        try:
+            # Initialize logger database connection
+            await self.logger.initialize()
+    
+            self._manager_active = True
+            # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
+            self._running_tasks = [
+                asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
+                asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
+                asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
+                asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
+            ]
+            # Incubator starts in the 'stopped' state (actuators off) based on loaded state or default
+            # self.incubator_running = False # This is now handled by _load_state or defaults
+            print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator running: {self.incubator_running}. Enabled states loaded.")
+    
+        except Exception as e:
+            print(f"Error starting Control Manager: {e}")
+            self._manager_active = False
+            await self.logger.close() # Ensure logger is closed if init failed
+            # Attempt cleanup if start failed partially
+            await self.stop()
+            raise # Re-raise the exception
+    
+        print("Starting Control Manager and background tasks...")
+        try:
+            # Initialize logger database connection
+            await self.logger.initialize()
+    
+            self._manager_active = True
+            # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
+            self._running_tasks = [
+                asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
+                asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
+                asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
+                asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
+            ]
+            # Incubator starts in the 'stopped' state (actuators off) based on loaded state or default
+            # self.incubator_running = False # This is now handled by _load_state or defaults
+            print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator running: {self.incubator_running}. Enabled states loaded.")
+    
+        except Exception as e:
+            print(f"Error starting Control Manager: {e}")
+            self._manager_active = False
+            await self.logger.close() # Ensure logger is closed if init failed
+            # Attempt cleanup if start failed partially
+            await self.stop()
+            raise # Re-raise the exception
+    
+        print("Starting Control Manager and background tasks...")
+        try:
+            # Initialize logger database connection
+            await self.logger.initialize()
+    
+            self._manager_active = True
+            # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
+            self._running_tasks = [
+                asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
+                asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
+                asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
+                asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
+            ]
+            # Incubator starts in the 'stopped' state (actuators off) based on loaded state or default
+            # self.incubator_running = False # This is now handled by _load_state or defaults
+            print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator running: {self.incubator_running}. Enabled states loaded.")
+    
+        except Exception as e:
+            print(f"Error starting Control Manager: {e}")
+            self._manager_active = False
+            await self.logger.close() # Ensure logger is closed if init failed
+            # Attempt cleanup if start failed partially
+            await self.stop()
+            raise # Re-raise the exception
 
-            print("Starting Control Manager and background tasks...")
-            try:
-                # Initialize logger database connection
-                await self.logger.initialize()
+    print("Starting Control Manager and background tasks...")
+    try:
+        # Initialize logger database connection
+        await self.logger.initialize()
 
-                self._manager_active = True
-                # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
-                self._running_tasks = [
-                    asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
-                    asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
-                    asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
-                    asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
-                    asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
-                    asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
-                ]
-                # Incubator starts in the 'stopped' state (actuators off) based on loaded state or default
-                # self.incubator_running = False # This is now handled by _load_state or defaults
-                print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator running: {self.incubator_running}. Enabled states loaded.")
+        self._manager_active = True
+        # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
+        self._running_tasks = [
+            asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
+            asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
+            asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
+            asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+            asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"), # Add air pump loop task
+            asyncio.create_task(self._logging_task(), name="LoggerTask") # Start logger task
+        ]
+        # Incubator starts in the 'stopped' state (actuators off) based on loaded state or default
+        # self.incubator_running = False # This is now handled by _load_state or defaults
+        print(f"Control Manager started with {len(self._running_tasks)} tasks. Incubator running: {self.incubator_running}. Enabled states loaded.")
 
-            except Exception as e:
-                print(f"Error starting Control Manager: {e}")
-                self._manager_active = False
-                await self.logger.close() # Ensure logger is closed if init failed
-                # Attempt cleanup if start failed partially
-                await self.stop()
-                raise # Re-raise the exception
+    except Exception as e:
+        print(f"Error starting Control Manager: {e}")
+        self._manager_active = False
+        await self.logger.close() # Ensure logger is closed if init failed
+        # Attempt cleanup if start failed partially
+        await self.stop()
+        raise # Re-raise the exception
 
     async def stop(self):
             """Stops all background tasks, cleans up HAL, and closes logger."""
