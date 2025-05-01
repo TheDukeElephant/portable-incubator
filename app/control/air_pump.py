@@ -24,7 +24,7 @@ class AirPumpControlLoop(BaseLoop):
     Runs the pump for a set duration at a specific interval.
     Implements the control_step required by BaseLoop.
     """
-    def __init__(self, manager: 'ControlManager', control_interval: float):
+    def __init__(self, manager: 'ControlManager', control_interval: float, enabled_attr: str):
         """
         Initializes the air pump control loop.
 
@@ -33,11 +33,12 @@ class AirPumpControlLoop(BaseLoop):
             control_interval (float): How often the control_step method should be called (in seconds).
                                       This loop's internal timing is based on time.monotonic(),
                                       so the call interval mainly affects responsiveness.
+            enabled_attr: The attribute name in the manager for the enabled state.
         """
         # Import ControlManager locally to avoid circular import issues if needed
         from app.control.manager import ControlManager
         # Pass the specific enabled attribute name for this loop
-        super().__init__(manager, control_interval, enabled_attr="air_pump_enabled")
+        super().__init__(manager, control_interval, enabled_attr=enabled_attr)
         # self.name = "AirPumpControl" # Name is usually handled by class name or manager
         try:
             self.motor = L298NMotor(pin_ena=PIN_ENA, pin_in1=PIN_IN1, pin_in2=PIN_IN2)

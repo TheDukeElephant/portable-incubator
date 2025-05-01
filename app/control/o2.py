@@ -22,6 +22,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
                  manager: 'ControlManager', # Add manager argument
                  # o2_sensor parameter removed, we instantiate it here
                  argon_valve_relay: RelayOutput,
+                 enabled_attr: str, # Accept the enabled attribute name
                  setpoint: float = 5.0, # Target O2 percentage (Argon ON if O2 > setpoint)
                  sample_time: float = 5.0, # Control loop interval in seconds
                  i2c_bus: int = 1, # Default I2C bus for RPi
@@ -33,14 +34,15 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         Args:
             manager: The ControlManager instance.
             argon_valve_relay: Instance of RelayOutput for the Argon valve.
+            enabled_attr: The attribute name in the manager for the enabled state.
             setpoint: The target O2 percentage. Argon valve opens if O2 > setpoint.
             sample_time: How often the control loop runs (seconds).
             i2c_bus: The I2C bus number (default 1 for Raspberry Pi).
             i2c_address: The I2C address of the sensor (default ADDRESS_0=0x70).
                          Can be ADDRESS_1 (0x71), ADDRESS_2 (0x72), ADDRESS_3 (0x73).
         """
-        # Call BaseLoop constructor, passing the manager and interval
-        super().__init__(manager=manager, control_interval=sample_time, enabled_attr="o2_enabled")
+        # Call BaseLoop constructor, passing the manager, interval, and enabled_attr
+        super().__init__(manager=manager, control_interval=sample_time, enabled_attr=enabled_attr)
 
         self.argon_valve_relay = argon_valve_relay
         self._setpoint = setpoint

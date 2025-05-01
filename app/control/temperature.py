@@ -18,6 +18,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
                  manager: 'ControlManager', # Add manager argument
                  temp_sensor: DHT22Sensor,
                  heater_relay: RelayOutput,
+                 enabled_attr: str, # Accept the enabled attribute name
                  p: float = 5.0,
                  i: float = 0.1,
                  d: float = 1.0,
@@ -32,6 +33,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
             manager: The ControlManager instance.
             temp_sensor: Instance of DHT22Sensor.
             heater_relay: Instance of RelayOutput for the heater.
+            enabled_attr: The attribute name in the manager for the enabled state.
             p: Proportional gain for PID.
             i: Integral gain for PID.
             d: Derivative gain for PID.
@@ -39,8 +41,8 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
             sample_time: How often the control loop runs (seconds).
             output_threshold: The PID output value above which the heater turns on.
         """
-        # Call BaseLoop constructor, passing the manager and interval
-        super().__init__(manager=manager, control_interval=sample_time, enabled_attr="temperature_enabled")
+        # Call BaseLoop constructor, passing the manager, interval, and enabled_attr
+        super().__init__(manager=manager, control_interval=sample_time, enabled_attr=enabled_attr)
 
         self.temp_sensor = temp_sensor
         self.heater_relay = heater_relay

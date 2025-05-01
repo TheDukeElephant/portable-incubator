@@ -17,6 +17,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
                  manager: 'ControlManager', # Add manager argument
                  humidity_sensor: DHT22Sensor,
                  humidifier_relay: RelayOutput,
+                 enabled_attr: str, # Accept the enabled attribute name
                  setpoint: float = 60.0, # Target humidity %
                  hysteresis: float = 2.0, # Control deadband (+/- from setpoint)
                  sample_time: float = 5.0 # Control loop interval in seconds
@@ -28,6 +29,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
             manager: The ControlManager instance.
             humidity_sensor: Instance of DHT22Sensor.
             humidifier_relay: Instance of RelayOutput for the humidifier.
+            enabled_attr: The attribute name in the manager for the enabled state.
             setpoint: Initial target humidity percentage.
             hysteresis: The range around the setpoint for switching (e.g., 2.0 means
                         turn ON below setpoint - 1.0, turn OFF above setpoint + 1.0).
@@ -36,8 +38,8 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
         if hysteresis <= 0:
             raise ValueError("Hysteresis must be a positive value.")
 
-        # Call BaseLoop constructor, passing the manager and interval
-        super().__init__(manager=manager, control_interval=sample_time, enabled_attr="humidity_enabled") # Pass the manager instance
+        # Call BaseLoop constructor, passing the manager, interval, and enabled_attr
+        super().__init__(manager=manager, control_interval=sample_time, enabled_attr=enabled_attr) # Pass the manager instance
 
         self.humidity_sensor = humidity_sensor
         self.humidifier_relay = humidifier_relay
