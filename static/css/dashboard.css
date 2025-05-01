@@ -56,12 +56,21 @@ h1 {
 
 .status-item h3 {
     margin-top: 0;
-    margin-bottom: 15px;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 10px;
+    margin-bottom: 0; /* Removed, handled by .section-header */
+    border-bottom: none; /* Removed, handled by .section-header */
+    padding-bottom: 0; /* Removed, handled by .section-header */
     color: var(--primary-accent);
     font-weight: 500;
     font-size: 1.1em;
+}
+/* --- Section Header (Title + Switch) --- */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px; /* Space below header */
+    border-bottom: 1px solid var(--border-color); /* Add border below header */
+    padding-bottom: 10px; /* Add padding below header */
 }
 
 /* --- Value Display --- */
@@ -287,14 +296,17 @@ h1 {
 .control-enable-switch {
     display: flex;
     align-items: center;
-    margin-bottom: 10px; /* Space below the switch */
-    margin-top: 5px; /* Space above the switch */
+    margin-bottom: 0; /* Removed, handled by .section-header */
+    margin-top: 0; /* Removed, handled by .section-header */
 }
 
 .switch-label {
     margin-left: 10px;
     font-size: 0.9em;
     color: var(--text-muted-color);
+.section-header .control-enable-switch .switch-label {
+    display: none; /* Hide "Control Loop" text when next to title */
+}
 }
 
 /* The switch - the box around the slider */
