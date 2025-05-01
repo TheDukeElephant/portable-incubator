@@ -2,6 +2,9 @@ import adafruit_dht
 import board
 import time
 import random
+
+# Dummy temperature value for testing
+DUMMY_TEMP_CELSIUS = 25.0
 import threading # Import threading
 
 # --- Configuration ---
@@ -30,7 +33,7 @@ class DHT22Sensor:
         self.dht_device = None
         self._initialization_lock = threading.Lock() # Lock for initialization
         self._initialized = False # Flag to track initialization attempt
-        self._last_temp = None # Initialize with None
+        self._last_temp = DUMMY_TEMP_CELSIUS # Initialize with dummy temperature
         self._last_humidity = None
 
         # Removed forced dummy mode logic.
@@ -173,7 +176,7 @@ class DHT22Sensor:
         """Returns the last successfully read temperature in Celsius."""
         # Optionally trigger a read here if data is stale, or rely on external loop
         # self.read() # Be careful about read frequency limits
-        return self._last_temp
+        return DUMMY_TEMP_CELSIUS # Always return the dummy temperature
 
     @property
     def humidity(self) -> float | None:
