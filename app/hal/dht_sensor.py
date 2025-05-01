@@ -6,10 +6,7 @@ import threading # Import threading
 
 # --- Configuration ---
 # Set to True to force dummy mode even if a real sensor library was added later
-FORCE_DUMMY_MODE = False # Set to True to test dummy behaviour
-DUMMY_TEMP_CELSIUS = 25.0
-DUMMY_HUMIDITY_PERCENT = 50.0
-DUMMY_VARIATION = 0.5 # Simulate small fluctuations
+# Removed dummy mode configuration as fallback logic is no longer required.
 
 # Sensor type: Adafruit_DHT.DHT11, Adafruit_DHT.DHT22, or Adafruit_DHT.AM2302
 SENSOR_TYPE = adafruit_dht.DHT22
@@ -29,19 +26,14 @@ class DHT22Sensor:
             pin: The GPIO pin number (BCM numbering) the sensor's data line is connected to.
         """
         self.pin_number = pin
-        self.is_dummy = False
+        # Removed dummy mode flag as it is no longer needed.
         self.dht_device = None
         self._initialization_lock = threading.Lock() # Lock for initialization
         self._initialized = False # Flag to track initialization attempt
         self._last_temp = DUMMY_TEMP_CELSIUS # Initialize with dummy values
         self._last_humidity = DUMMY_HUMIDITY_PERCENT
 
-        if FORCE_DUMMY_MODE:
-            # If forcing dummy, mark as initialized in dummy mode immediately
-            self.is_dummy = True
-            self._initialized = True # Mark as initialized (in dummy mode)
-            print(f"DHT22Sensor (GPIO {pin}) initialized in FORCED DUMMY MODE.")
-            return
+        # Removed forced dummy mode logic.
 
         # Initialization logic moved to _initialize_hardware()
         # We don't want to block here anymore.
@@ -52,7 +44,7 @@ class DHT22Sensor:
         """
         Attempts to initialize the actual hardware sensor.
         This method is intended to be called in a background thread.
-        Sets self.dht_device on success or self.is_dummy = True on failure.
+        Sets self.dht_device on success or logs a warning on failure.
         """
         with self._initialization_lock:
             if self._initialized: # Prevent re-initialization attempt
@@ -81,13 +73,11 @@ class DHT22Sensor:
                 print(f"DHT22Sensor hardware initialized successfully for GPIO {self.pin_number}.")
 
             except (ValueError, RuntimeError, NotImplementedError, AttributeError) as e: # Added AttributeError for getattr
-                print(f"Warning: Failed to initialize DHT22 sensor on GPIO {self.pin_number}: {e}. Falling back to DUMMY MODE.")
-                self.is_dummy = True
+                print(f"Warning: Failed to initialize DHT22 sensor on GPIO {self.pin_number}: {e}.")
                 self.dht_device = None # Ensure device is None
             except Exception as e:
                 # Catch any other unexpected errors during init
-                print(f"Warning: Unexpected error initializing DHT22 sensor on GPIO {self.pin_number}: {e}. Falling back to DUMMY MODE.")
-                self.is_dummy = True
+                print(f"Warning: Unexpected error initializing DHT22 sensor on GPIO {self.pin_number}: {e}.")
                 self.dht_device = None # Ensure device is None
             finally:
                 self._initialized = True # Mark initialization as attempted (success or failure)
@@ -95,23 +85,13 @@ class DHT22Sensor:
     def read(self) -> tuple[float | None, float | None]:
         """
         Reads temperature and humidity.
-        Returns dummy values if in dummy mode or if hardware init failed.
         Returns last known values if hardware is not yet initialized or read fails.
         Attempts to read the sensor with retries if hardware is initialized.
 
         Returns:
             A tuple containing (temperature_celsius, humidity_percent).
         """
-        if self.is_dummy:
-            # Simulate slight variation around the dummy value
-            temp = round(DUMMY_TEMP_CELSIUS + random.uniform(-DUMMY_VARIATION, DUMMY_VARIATION), 1)
-            hum = round(DUMMY_HUMIDITY_PERCENT + random.uniform(-DUMMY_VARIATION, DUMMY_VARIATION), 1)
-            # Clamp humidity to valid range
-            hum = max(0.0, min(100.0, hum))
-            self._last_temp = temp
-            self._last_humidity = hum
-            # print(f"DHT22 Read (Dummy): Temp={temp}°C, Hum={hum}%") # Optional debug
-            return temp, hum
+        # Removed dummy mode read logic.
 
         # --- Check if hardware is ready ---
         if not self.dht_device:
@@ -206,8 +186,6 @@ class DHT22Sensor:
             init_thread = threading.Thread(target=self._initialize_hardware, daemon=True)
             init_thread.start()
             print(f"DHT22 background initialization thread started for GPIO {self.pin_number}.")
-        elif self.is_dummy:
-            print(f"DHT22 (GPIO {self.pin_number}) is in dummy mode, skipping background initialization.")
         else: # Already initialized or init started
              pass # Or print a message indicating it's already handled
 
