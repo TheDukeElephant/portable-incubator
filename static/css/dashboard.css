@@ -110,19 +110,22 @@ h1 {
 }
 
 .setpoint-button {
-    padding: 8px 15px;
+    padding: 10px 20px;
     cursor: pointer;
     border: none;
-    border-radius: 4px;
-    background-color: var(--secondary-accent);
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));
     color: #fff;
     font-family: var(--font-family);
-    font-weight: 500;
-    transition: background-color 0.2s ease;
+    font-weight: 600;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    transition: background 0.3s ease, transform 0.2s ease;
 }
 
 .setpoint-button:hover {
-    background-color: #2a70e0; /* Darker blue on hover */
+    background: linear-gradient(135deg, var(--secondary-accent), var(--primary-accent));
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* --- Relay Status --- */

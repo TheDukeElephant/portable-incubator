@@ -60,11 +60,9 @@ class L298NMotor:
 
         if speed_fraction > 0:
             # For a pump, we only run forward.
-            if not self.motor.pwm:
-                # Non-PWM motors only accept 0 or 1
-                self.motor.forward(speed=1)
-            else:
-                self.motor.forward(speed=speed_fraction)
+            # Since pwm=False during init, motor only supports on/off.
+            # Any speed > 0 means turn it on fully.
+            self.motor.forward(speed=1)
         else:
             self.motor.stop()
 
