@@ -12,9 +12,21 @@ class CO2Reading:
     timestamp: dt.datetime = dt.datetime.utcnow()
 
 class CO2Sensor:
-    def __init__(self, url='/dev/serial0', baudrate=9600,
-                 init_cmd=b'K 2\r\n', read_cmd=b'Z 2\r\n', *,
-                 timeout=1.0):
+    def __init__(self, url: str, baudrate: int = 9600,
+                 init_cmd: bytes = b'K 2\r\n', read_cmd: bytes = b'Z 2\r\n', *,
+                 timeout: float = 1.0):
+        """
+        Initializes the CO2 Sensor communication.
+
+        Args:
+            url (str): The serial port device path (e.g., '/dev/ttyS0', '/dev/ttyUSB0'). Required.
+            baudrate (int): Serial communication baud rate.
+            init_cmd (bytes): Initialization command to send to the sensor (optional).
+            read_cmd (bytes): Command to send to request a reading.
+            timeout (float): Read timeout in seconds.
+        """
+        if not url:
+            raise ValueError("Serial port URL (device path) cannot be empty.")
         # Store config using 'url' key expected by serial_asyncio
         self._port_cfg = dict(url=url, baudrate=baudrate, timeout=timeout)
         self._init_cmd = init_cmd

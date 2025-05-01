@@ -23,7 +23,7 @@ class CO2Loop(BaseLoop):
     """
     def __init__(self,
                  manager: 'ControlManager', # Add manager argument
-                 sensor: CO2Sensor,
+                 co2_sensor_port: str, # Accept sensor port path
                  vent_relay_pin: int,
                  enabled_attr: str, # Accept the enabled attribute name
                  setpoint: float = DEFAULT_CO2_SETPOINT_PPM):
@@ -32,13 +32,14 @@ class CO2Loop(BaseLoop):
 
         Args:
             manager: The ControlManager instance.
-            sensor: Instance of CO2Sensor.
+            co2_sensor_port: The serial port device path for the CO2 sensor (e.g., '/dev/ttyS0').
             vent_relay_pin: The GPIO pin number for the vent relay.
             enabled_attr: The attribute name in the manager for the enabled state.
             setpoint: Initial target maximum CO2 level in ppm.
         """
         super().__init__(manager=manager, control_interval=CONTROL_INTERVAL_SECONDS, enabled_attr=enabled_attr) # Pass manager and enabled_attr
-        self.sensor = sensor
+        # Instantiate the sensor here using the provided port
+        self.sensor = CO2Sensor(url=co2_sensor_port)
         self._setpoint = setpoint
         self.vent_relay_pin = vent_relay_pin
         self.current_co2 = None # Initialize as None

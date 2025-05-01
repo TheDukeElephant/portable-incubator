@@ -30,6 +30,11 @@ HUMIDIFIER_PIN = 27
 ARGON_VALVE_PIN = 23
 CO2_VENT_PIN = 24
 
+# Serial Port Configuration
+# IMPORTANT: Verify this is the correct serial port for your CO2 sensor!
+# Common options: '/dev/ttyS0' (RPi default serial), '/dev/ttyAMA0' (older RPi), '/dev/ttyUSB0' (USB adapter)
+CO2_SENSOR_PORT = '/dev/ttyS0'
+
 # I2C Configuration
 O2_SENSOR_ADDR = 0x73
 
@@ -116,10 +121,10 @@ class ControlManager:
         )
         self.co2_loop = CO2Loop(
             manager=self, # Pass manager instance
-            sensor=self.co2_sensor,
+            co2_sensor_port=CO2_SENSOR_PORT, # Pass the configured sensor port
             vent_relay_pin=CO2_VENT_PIN,
-            setpoint=DEFAULT_CO2_SETPOINT,
-            enabled_attr="co2_enabled" # Pass the enabled attribute name
+            enabled_attr="co2_enabled", # Pass the enabled attribute name
+            setpoint=DEFAULT_CO2_SETPOINT
         )
         self.air_pump_loop = AirPumpControlLoop(
             manager=self, # Pass manager instance (required by BaseLoop)
