@@ -88,7 +88,18 @@ class BaseLoop(ABC):
                 continue
             start_time = time.monotonic()
             try:
-                await self.control_step()
+                # Only run control_step if active at the start of the iteration
+                if self._active():
+                    await self.control_step()
+                # else: # If inactive at start, _ensure_actuator_off was already called
+
+                # --- ADDED CHECK ---
+                # Re-check active state *after* control_step potentially ran or was skipped.
+                # If it became inactive during the step/check, ensure actuator is off now.
+                if not self._active():
+                    self._ensure_actuator_off()
+                # --- END ADDED CHECK ---
+
             except asyncio.CancelledError:
                 print(f"{self.__class__.__name__} run cancelled.")
                 break # Exit loop if cancelled
@@ -98,6 +109,7 @@ class BaseLoop(ABC):
                 # For now, continue but log the error
 
             # Calculate time elapsed and sleep for the remaining interval
+            # Ensure elapsed_time calculation still makes sense if control_step was skipped
             elapsed_time = time.monotonic() - start_time
             sleep_duration = max(0, self.control_interval - elapsed_time)
 
