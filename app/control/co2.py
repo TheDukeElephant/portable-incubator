@@ -89,22 +89,10 @@ class CO2Loop(BaseLoop):
                 self._vent_start_time = None
             return # Skip control logic if sensor read failed or was invalid
 
-        # --- Check if incubator is running AND this specific loop is enabled ---
-        if not self.manager.incubator_running or not self.manager.co2_enabled:
-            # If stopped or disabled, ensure vent is off and skip logic
-            if self.vent_relay and self.vent_active:
-                self.vent_relay.off()
-                self.vent_active = False
-                self._vent_start_time = None
-                if not self.manager.incubator_running:
-                    print("Incubator stopped: Turning vent OFF.")
-                else: # Must be disabled
-                    print("CO2 control disabled: Turning vent OFF.")
-            return
-        # --- Incubator is running and CO2 control is enabled, proceed ---
+        # --- Control logic proceeds only if BaseLoop determined the loop is active ---
 
         # 2. Control Logic (Simple Threshold)
-        # This part is only reached if reading_successful is True and incubator is running and CO2 control is enabled
+        # This part is only reached if reading_successful is True and the loop is active
         # TODO: Add hysteresis or more advanced control if needed
         if self.vent_relay:
             # We know self.current_co2 is a valid number here
@@ -145,6 +133,14 @@ class CO2Loop(BaseLoop):
 
         # print(f"CO2 Loop: Current={self.current_co2} ppm, Setpoint=<{self._setpoint} ppm, Vent Active={self.is_vent_active}") # Debug print
 
+    def _ensure_actuator_off(self):
+        """Turns the vent relay off and resets vent state."""
+        if self.vent_relay and self.vent_active:
+            print("CO2 loop inactive: Turning vent OFF.")
+            self.vent_relay.off()
+        self.vent_active = False
+        self._vent_start_time = None
+
     def get_status(self) -> dict:
         """Returns the current status of the CO2 loop."""
         return {
@@ -176,7 +172,5 @@ class CO2Loop(BaseLoop):
     @property
     def is_vent_active(self) -> bool:
         """Returns True if the vent relay is currently commanded ON, incubator is running, and CO2 control is enabled."""
-        # Ensure vent_active is False if incubator isn't running or CO2 control is disabled
-        if not self.manager.incubator_running or not self.manager.co2_enabled:
-            return False
+        # The BaseLoop ensures this is only True when the loop is active and commanded ON.
         return self.vent_active

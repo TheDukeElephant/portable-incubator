@@ -36,7 +36,8 @@ class AirPumpControlLoop(BaseLoop):
         """
         # Import ControlManager locally to avoid circular import issues if needed
         from app.control.manager import ControlManager
-        super().__init__(manager, control_interval)
+        # Pass the specific enabled attribute name for this loop
+        super().__init__(manager, control_interval, enabled_attr="air_pump_enabled")
         # self.name = "AirPumpControl" # Name is usually handled by class name or manager
         try:
             self.motor = L298NMotor(pin_ena=PIN_ENA, pin_in1=PIN_IN1, pin_in2=PIN_IN2)
@@ -99,6 +100,38 @@ class AirPumpControlLoop(BaseLoop):
         # Optional: Log current state periodically for debugging
         # logger.debug(f"AirPump Step: State={self.pump_state}, CycleTime={time_since_cycle_start:.2f}")
 
+    def _ensure_actuator_off(self):
+        """Ensures the air pump motor is stopped."""
+        if self.motor and self.pump_state != "off" and self.pump_state != "error":
+            try:
+                logger.info("Air pump loop inactive: Stopping motor.")
+                self.motor.stop()
+                self.pump_state = "off" # Reset state when forced off
+                self.last_cycle_start_time = time.monotonic() # Reset cycle timer
+            except Exception as e:
+                logger.error(f"Failed to stop air pump during ensure_off: {e}", exc_info=True)
+                self.pump_state = "error"
+
+    def reset_control(self):
+        """Resets the pump state, ensuring it's off."""
+        logger.info("AirPumpControlLoop: Resetting control state (forcing pump OFF).")
+        if self.motor:
+            try:
+                self.motor.stop()
+            except Exception as e:
+                 logger.error(f"Failed to stop air pump during reset_control: {e}", exc_info=True)
+                 self.pump_state = "error"
+                 return # Exit if stop failed
+
+        self.pump_state = "off"
+        self.last_cycle_start_time = time.monotonic() # Reset cycle timer
+
+    @property
+    def is_pump_on(self) -> bool:
+        """Returns True if the pump motor is currently commanded ON."""
+        # The BaseLoop ensures this is only True when the loop is active and commanded ON.
+        return self.pump_state == "on"
+
     def get_status(self):
         """Returns the current status of the air pump."""
         if not self.motor:
@@ -108,11 +141,12 @@ class AirPumpControlLoop(BaseLoop):
                 "state": "error - motor not initialized"
             }
 
-        is_on = self.pump_state == "on"
+        # Use the new property
+        is_on = self.is_pump_on
         current_speed = self.motor.current_speed if is_on else 0
 
         return {
-            "pump_on": is_on,
+            "pump_on": is_on, # Use property result
             "speed_percent": current_speed,
             "state": self.pump_state,
             "cycle_elapsed_time": time.monotonic() - self.last_cycle_start_time

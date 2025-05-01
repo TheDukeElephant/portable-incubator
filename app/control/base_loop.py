@@ -30,30 +30,20 @@ class BaseLoop(ABC):
 
     def _active(self) -> bool:
         """
-        Returns True only when BOTH
-          * the global incubator switch is ON, and
-          * this specific loop is enabled.
+        Returns True only when this specific loop is enabled via its
+        corresponding flag in the ControlManager.
         """
-        return (self.manager.incubator_running and
-                (getattr(self.manager, self._enabled_attr, True) if self._enabled_attr else True))
-        """
-        Initializes the base loop.
+        # Check only the specific enabled flag, ignore incubator_running
+        return getattr(self.manager, self._enabled_attr, True) if self._enabled_attr else True
 
-        Args:
-            manager: The ControlManager instance.
-            control_interval: The time in seconds between control steps.
+    @abstractmethod
+    def _ensure_actuator_off(self):
         """
-        if control_interval <= 0:
-            raise ValueError("Control interval must be positive.")
-        # Import ControlManager locally to avoid circular import at module level
-        from .manager import ControlManager
-        if not isinstance(manager, ControlManager):
-             raise TypeError("Manager must be an instance of ControlManager")
-        self.manager = manager
-        self.control_interval = control_interval
-        self._is_running = False
-        self._stop_event = asyncio.Event()
-        self._task: asyncio.Task | None = None
+        Ensure the actuator(s) controlled by this loop are turned off.
+        This is called when the loop becomes inactive (_active() returns False).
+        Must be implemented by subclasses.
+        """
+        pass
 
     @abstractmethod
     async def control_step(self):

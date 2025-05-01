@@ -111,18 +111,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
                  self._argon_valve_on = False
             return
 
-        # --- Check if incubator is running AND this specific loop is enabled ---
-        if not self.manager.incubator_running or not self.manager.o2_enabled:
-            # If stopped or disabled, ensure Argon valve is off and skip logic
-            if self._argon_valve_on:
-                self.argon_valve_relay.off()
-                self._argon_valve_on = False
-                if not self.manager.incubator_running:
-                    print("Incubator stopped: Turning Argon valve OFF.")
-                else: # Must be disabled
-                    print("O2 control disabled: Turning Argon valve OFF.")
-            return
-        # --- Incubator is running and O2 control is enabled, proceed ---
+        # --- Control logic proceeds only if BaseLoop determined the loop is active ---
 
         # Threshold Logic: Turn Argon ON if O2 is strictly greater than setpoint
         # Use the validated float value for comparison
@@ -139,6 +128,13 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
                 # Use the float value for printing
                 print(f"Argon Valve OFF (O2: {current_o2_float:.2f}% <= Setpoint: {self._setpoint:.1f}%)")
             self._argon_valve_on = new_argon_valve_state
+
+    def _ensure_actuator_off(self):
+        """Turns the argon valve relay off."""
+        if self.argon_valve_relay and self._argon_valve_on:
+            print("O2 loop inactive: Turning Argon valve OFF.")
+            self.argon_valve_relay.off()
+            self._argon_valve_on = False
 
     # Remove the custom run() method, BaseLoop provides it.
     # async def run(self): ...
@@ -183,8 +179,8 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
     @property
     def argon_valve_is_on(self) -> bool:
         """Returns True if the Argon valve relay is currently commanded ON."""
-         # Reflect the actual state based on incubator running AND enabled status
-        return self._argon_valve_on and self.manager.incubator_running and self.manager.o2_enabled
+        # The BaseLoop ensures this is only True when the loop is active and commanded ON.
+        return self._argon_valve_on
 
     def get_status(self) -> dict:
         """Returns the current status of the O2 loop."""

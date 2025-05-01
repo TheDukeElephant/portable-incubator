@@ -70,6 +70,7 @@ class ControlManager:
         self.humidity_enabled = True
         self.o2_enabled = True
         self.co2_enabled = True
+        self.air_pump_enabled = True # NEW: Add air pump enabled state
         # ---------------------------------------------
 
         # 1. Initialize HAL Components
@@ -157,6 +158,7 @@ class ControlManager:
             'humidity_enabled': True,
             'o2_enabled': True,
             'co2_enabled': True,
+            'air_pump_enabled': True, # NEW: Add default for air pump
         }
         loaded_state = default_state.copy() # Start with defaults
 
@@ -217,6 +219,7 @@ class ControlManager:
         self.humidity_enabled = bool(state.get('humidity_enabled', True))
         self.o2_enabled = bool(state.get('o2_enabled', True))
         self.co2_enabled = bool(state.get('co2_enabled', True))
+        self.air_pump_enabled = bool(state.get('air_pump_enabled', True)) # NEW: Apply air pump state
 
 
     def _apply_default_enabled_states(self):
@@ -226,12 +229,13 @@ class ControlManager:
             self.humidity_enabled = True
             self.o2_enabled = True
             self.co2_enabled = True
+            self.air_pump_enabled = True # NEW: Reset air pump state
             # Note: This doesn't reset setpoints or incubator_running state, only the enabled flags.
 
     async def _logging_task(self):
-            """Background task to periodically log data."""
-            print("Data logging task started.")
-            while self._manager_active: # Keep task alive while manager is active
+        """Background task to periodically log data."""
+        print("Data logging task started.")
+        while self._manager_active: # Keep task alive while manager is active
                 try:
                     # Log data regardless of incubator_running state, but log the state itself
                     status = self.get_status() # Get full status including enabled states
@@ -242,6 +246,7 @@ class ControlManager:
                         'humidity_enabled': status.get('humidity_enabled'),
                         'o2_enabled': status.get('o2_enabled'),
                         'co2_enabled': status.get('co2_enabled'),
+                        'air_pump_enabled': status.get('air_pump_enabled'), # NEW: Log air pump enabled state
                         # ---------------------------------
                         'temperature': status.get('temperature'),
                         'humidity': status.get('humidity'),
@@ -274,7 +279,7 @@ class ControlManager:
                     if self._manager_active:
                         await asyncio.sleep(LOGGING_INTERVAL / 2)
 
-            print("Data logging task stopped.")
+        print("Data logging task stopped.")
 
 
     async def start(self):
@@ -438,6 +443,7 @@ class ControlManager:
                 "humidity_enabled": self.humidity_enabled,
                 "o2_enabled": self.o2_enabled,
                 "co2_enabled": self.co2_enabled,
+                "air_pump_enabled": self.air_pump_enabled, # NEW: Report air pump enabled state
                 # ---------------------------------
                 "temperature": temp_status.get("temperature"),
                 "temp_setpoint": temp_status.get("setpoint"),
@@ -493,6 +499,7 @@ class ControlManager:
                         'humidity_enabled': self.humidity_enabled,
                         'o2_enabled': self.o2_enabled,
                         'co2_enabled': self.co2_enabled,
+                        'air_pump_enabled': self.air_pump_enabled, # NEW: Save air pump state
                     }
                     self._save_state(current_state)
 
@@ -507,6 +514,8 @@ class ControlManager:
                 return self.o2_enabled
             elif control_name == "co2":
                 return self.co2_enabled
+            elif control_name == "air_pump": # NEW: Get air pump state
+                return self.air_pump_enabled
             else:
                 print(f"Warning: Unknown control name '{control_name}' in get_control_state")
                 return None
@@ -521,6 +530,7 @@ class ControlManager:
                 "humidity": "humidity_enabled",
                 "o2": "o2_enabled",
                 "co2": "co2_enabled",
+                "air_pump": "air_pump_enabled", # NEW: Map air pump state
             }
 
             if control_name not in control_key_map:
@@ -581,6 +591,14 @@ class ControlManager:
                              self.co2_loop.reset_control()
                         else:
                              print(f"Warning: CO2Loop does not have a 'reset_control' method.")
+                   elif control_name == "air_pump": # NEW: Handle air pump kill switch
+                       if self.air_pump_loop and self.air_pump_loop.motor:
+                           self.air_pump_loop.motor.stop()
+                           # Optionally reset air pump loop state if needed
+                           if hasattr(self.air_pump_loop, 'reset_control'): # Check if method exists
+                               self.air_pump_loop.reset_control()
+                           else:
+                               print(f"Warning: AirPumpControlLoop does not have a 'reset_control' method.")
 
             except Exception as e:
                 # Catch potential errors during load/save/update

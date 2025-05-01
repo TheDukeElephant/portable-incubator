@@ -83,18 +83,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
                  self._humidifier_on = False
             return
 
-        # --- Check if incubator is running AND this specific loop is enabled ---
-        if not self.manager.incubator_running or not self.manager.humidity_enabled:
-            # If stopped or disabled, ensure humidifier is off and skip logic
-            if self._humidifier_on:
-                self.humidifier_relay.off()
-                self._humidifier_on = False
-                if not self.manager.incubator_running:
-                    print("Incubator stopped: Turning humidifier OFF.")
-                else: # Must be disabled
-                    print("Humidity control disabled: Turning humidifier OFF.")
-            return
-        # --- Incubator is running and Humidity control is enabled, proceed ---
+        # --- Control logic proceeds only if BaseLoop determined the loop is active ---
 
         # Hysteresis Logic
         new_humidifier_state = self._humidifier_on # Assume no change initially
@@ -117,6 +106,13 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
                 self.humidifier_relay.off()
                 print(f"Humidifier OFF (Hum: {self._current_humidity:.2f}%, Setpoint: {self._setpoint:.1f}%, Threshold: >= {self._turn_off_threshold:.1f}%)")
             self._humidifier_on = new_humidifier_state
+
+    def _ensure_actuator_off(self):
+        """Turns the humidifier relay off."""
+        if self.humidifier_relay and self._humidifier_on:
+            print("Humidity loop inactive: Turning humidifier OFF.")
+            self.humidifier_relay.off()
+            self._humidifier_on = False
 
     # Remove the custom run() method, BaseLoop provides it.
     # async def run(self): ...
@@ -163,8 +159,8 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
     @property
     def humidifier_is_on(self) -> bool:
         """Returns True if the humidifier relay is currently commanded ON."""
-        # Reflect the actual state based on incubator running AND enabled status
-        return self._humidifier_on and self.manager.incubator_running and self.manager.humidity_enabled
+        # The BaseLoop ensures this is only True when the loop is active and commanded ON.
+        return self._humidifier_on
 
     def get_status(self) -> dict:
         """Returns the current status of the humidity loop."""

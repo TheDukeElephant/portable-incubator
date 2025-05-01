@@ -88,21 +88,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
             self.pid.reset()
             return
 
-        # --- Check if incubator is running AND this specific loop is enabled ---
-        if not self.manager.incubator_running or not self.manager.temperature_enabled:
-            # If stopped or disabled, ensure heater is off and skip PID calculation
-            if self._heater_on:
-                self.heater_relay.off()
-                self._heater_on = False
-                if not self.manager.incubator_running:
-                    print("Incubator stopped: Turning heater OFF.")
-                else: # Must be disabled
-                    print("Temperature control disabled: Turning heater OFF.")
-            # Reset PID to prevent windup while stopped/disabled
-            self.pid.reset()
-            return
-
-        # --- Incubator is running and Temperature control is enabled, proceed ---
+        # --- Control logic proceeds only if BaseLoop determined the loop is active ---
         # Calculate PID output
         pid_output = self.pid(self._current_temperature)
 
@@ -118,6 +104,14 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
                 print(f"Heater OFF (Temp: {self._current_temperature:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
             self._heater_on = new_heater_state
         # else: No change in heater state
+
+    def _ensure_actuator_off(self):
+        """Turns the heater relay off and resets the PID."""
+        if self.heater_relay and self._heater_on:
+            print("Temperature loop inactive: Turning heater OFF and resetting PID.")
+            self.heater_relay.off()
+            self._heater_on = False
+            self.pid.reset() # Reset PID when loop becomes inactive
 
     async def control_step(self):
         """Performs a single temperature control step."""
@@ -164,8 +158,8 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     @property
     def heater_is_on(self) -> bool:
         """Returns True if the heater relay is currently commanded ON."""
-        # Reflect the actual state based on incubator running AND enabled status
-        return self._heater_on and self.manager.incubator_running and self.manager.temperature_enabled
+        # The BaseLoop ensures this is only True when the loop is active and commanded ON.
+        return self._heater_on
 
     def get_status(self) -> dict:
         """Returns the current status of the temperature loop."""
