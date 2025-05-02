@@ -653,24 +653,24 @@ class ControlManager:
                  # Consider if the in-memory state should be reverted here if an error occurred
                  # For now, just log the error.
 
-            # --- DETAILED LOGGING ---
-            print(f"--- set_control_state END ---")
-            # --- END DETAILED LOGGING ---
-
-        # Lock is released automatically when exiting the 'with' block
-
-    # ----------------------------------------------------
-   # Corrected indentation for __aenter__ and __aexit__
-   async def __aenter__(self):
-        """Allows using 'async with ControlManager(...)' syntax."""
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Ensures stop is called when exiting 'async with' block."""
-        await self.stop()
-
-    # Example Usage (Conceptual - requires running within an asyncio loop)
+             # --- DETAILED LOGGING ---
+             print(f"--- set_control_state END ---")
+             # --- END DETAILED LOGGING ---
+ 
+         # Lock is released automatically when exiting the 'with' block
+ 
+     # ----------------------------------------------------
+     # Corrected indentation for __aenter__ and __aexit__
+     async def __aenter__(self):
+         """Allows using 'async with ControlManager(...)' syntax."""
+         await self.start()
+         return self
+ 
+     async def __aexit__(self, exc_type, exc_val, exc_tb):
+         """Ensures stop is called when exiting 'async with' block."""
+         await self.stop()
+ 
+     # Example Usage (Conceptual - requires running within an asyncio loop)
 # async def main():
 #     manager = ControlManager()
 #     try:
