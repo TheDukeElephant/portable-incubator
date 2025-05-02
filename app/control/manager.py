@@ -653,13 +653,13 @@ class ControlManager:
                  # Consider if the in-memory state should be reverted here if an error occurred
                  # For now, just log the error.
 
-             # --- DETAILED LOGGING ---
-             print(f"--- set_control_state END ---")
-             # --- END DETAILED LOGGING ---
- 
-         # Lock is released automatically when exiting the 'with' block
- 
-     # ----------------------------------------------------
+            # --- DETAILED LOGGING ---
+            print(f"--- set_control_state END ---")
+            # --- END DETAILED LOGGING ---
+
+        # Lock is released automatically when exiting the 'with' block
+
+    # ----------------------------------------------------
      # Corrected indentation for __aenter__ and __aexit__
      async def __aenter__(self):
          """Allows using 'async with ControlManager(...)' syntax."""
