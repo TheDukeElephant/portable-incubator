@@ -97,7 +97,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         if self.current_value == "NC":
             # Safety measure: If O2 is "NC", ensure the Argon valve is off
             # ONLY if the loop is supposed to be active. Otherwise, BaseLoop handles it.
-            if self.is_active and self._argon_valve_on:
+            if self._active() and self._argon_valve_on: # <-- Use _active() method call
                 print("Safety: Turning Argon valve OFF due to O2 sensor reading 'NC' while loop is active.")
                 self.argon_valve_relay.off()
                 self._argon_valve_on = False

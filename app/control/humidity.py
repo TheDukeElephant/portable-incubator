@@ -75,7 +75,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
 
     async def control_step(self):
         """Reads sensor, applies hysteresis logic, and updates the humidifier relay state."""
-        self._logger.debug(f"Humidity control_step. is_active={self.is_active}") # <-- ADDED LOG
+        print(f"DEBUG: Humidity control_step. is_active={self._active()}") # <-- Use print and call _active()
         self._read_sensor() # Read sensor first
 
         if self._current_humidity == "NC":
@@ -114,11 +114,22 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
 
     def _ensure_actuator_off(self):
         """Turns the humidifier relay off."""
-        self._logger.info(f"Humidity _ensure_actuator_off called. Current humidifier state: {self._humidifier_on}") # <-- ADDED LOG
+        print(f"DEBUG: Humidity _ensure_actuator_off called. Current humidifier state: {self._humidifier_on}") # <-- Use print
         if self.humidifier_relay and self._humidifier_on:
-            self._logger.info("Humidity loop inactive: Turning humidifier OFF.") # <-- Use logger
-            self.humidifier_relay.off()
-            self._humidifier_on = False
+            print("Humidity loop inactive: Turning humidifier OFF.") # <-- Use print
+            try:
+                self.humidifier_relay.off()
+                print("DEBUG: Hum humidifier_relay.off() called.") # <-- ADDED LOG
+                self._humidifier_on = False
+            except Exception as e:
+                print(f"ERROR in Hum _ensure_actuator_off: {e}") # <-- ADDED ERROR LOG
+        elif self.humidifier_relay:
+             # Ensure it's off even if _humidifier_on was already False
+             try:
+                 self.humidifier_relay.off()
+                 print("DEBUG: Hum _ensure_actuator_off ensuring relay is off.") # <-- ADDED LOG
+             except Exception as e:
+                 print(f"ERROR in Hum _ensure_actuator_off (ensuring off): {e}") # <-- ADDED ERROR LOG
 
     # Remove the custom run() method, BaseLoop provides it.
     # async def run(self): ...

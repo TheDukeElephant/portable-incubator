@@ -109,16 +109,27 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
     def _ensure_actuator_off(self):
         """Turns the heater relay off and resets the PID."""
-        self._logger.info(f"Temperature _ensure_actuator_off called. Current heater state: {self._heater_on}") # <-- ADDED LOG
+        print(f"DEBUG: Temperature _ensure_actuator_off called. Current heater state: {self._heater_on}") # <-- Use print
         if self.heater_relay and self._heater_on:
-            self._logger.info("Temperature loop inactive: Turning heater OFF and resetting PID.") # <-- Use logger
-            self.heater_relay.off()
-            self._heater_on = False
-            self.pid.reset() # Reset PID when loop becomes inactive
+            print("Temperature loop inactive: Turning heater OFF and resetting PID.") # <-- Use print
+            try:
+                self.heater_relay.off()
+                print("DEBUG: Temp heater_relay.off() called.") # <-- ADDED LOG
+                self._heater_on = False
+                self.pid.reset() # Reset PID when loop becomes inactive
+            except Exception as e:
+                print(f"ERROR in Temp _ensure_actuator_off: {e}") # <-- ADDED ERROR LOG
+        elif self.heater_relay:
+             # Ensure it's off even if _heater_on was already False
+             try:
+                 self.heater_relay.off()
+                 print("DEBUG: Temp _ensure_actuator_off ensuring relay is off.") # <-- ADDED LOG
+             except Exception as e:
+                 print(f"ERROR in Temp _ensure_actuator_off (ensuring off): {e}") # <-- ADDED ERROR LOG
 
     async def control_step(self):
         """Performs a single temperature control step."""
-        self._logger.debug(f"Temperature control_step. is_active={self.is_active}") # <-- ADDED LOG
+        print(f"DEBUG: Temperature control_step. is_active={self._active()}") # <-- Use print and call _active()
         self._read_sensor()
         self._update_control()
 
