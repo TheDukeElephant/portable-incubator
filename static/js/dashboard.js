@@ -133,6 +133,7 @@ function initCharts() {
 
 // --- UI and Chart Update Function ---
 function updateUI(data) {
+    console.log("[LOG] updateUI received data:", JSON.stringify(data)); // Log received data
     const now = new Date(); // Use a single timestamp for all values in this update
 
     // Helper function to update chart data arrays
@@ -161,6 +162,7 @@ function updateUI(data) {
     updateChartData('temperature', data.temperature); // Update chart data
     // Update Temperature Enable Switch state (only if element exists and data is present)
     if (tempEnableSwitch && data.temperature_enabled !== undefined && document.activeElement !== tempEnableSwitch) {
+        console.log(`[LOG] updateUI: Setting tempEnableSwitch.checked = ${data.temperature_enabled}`);
         tempEnableSwitch.checked = data.temperature_enabled;
     }
 
@@ -182,6 +184,7 @@ function updateUI(data) {
     updateChartData('humidity', data.humidity); // Update chart data
     // Update Humidity Enable Switch state
     if (humEnableSwitch && data.humidity_enabled !== undefined && document.activeElement !== humEnableSwitch) {
+        console.log(`[LOG] updateUI: Setting humEnableSwitch.checked = ${data.humidity_enabled}`);
         humEnableSwitch.checked = data.humidity_enabled;
     }
 
@@ -196,6 +199,7 @@ function updateUI(data) {
     updateChartData('o2', data.o2); // Update chart data
     // Update O2 Enable Switch state
     if (o2EnableSwitch && data.o2_enabled !== undefined && document.activeElement !== o2EnableSwitch) {
+        console.log(`[LOG] updateUI: Setting o2EnableSwitch.checked = ${data.o2_enabled}`);
         o2EnableSwitch.checked = data.o2_enabled;
     }
 
@@ -216,6 +220,7 @@ function updateUI(data) {
     updateChartData('co2', co2_percentage);
     // Update CO2 Enable Switch state
     if (co2EnableSwitch && data.co2_enabled !== undefined && document.activeElement !== co2EnableSwitch) {
+        console.log(`[LOG] updateUI: Setting co2EnableSwitch.checked = ${data.co2_enabled}`);
         co2EnableSwitch.checked = data.co2_enabled;
     }
 
@@ -311,6 +316,7 @@ function handleControlToggle(event) {
     const switchElement = event.target;
     const controlName = switchElement.dataset.control; // Get 'temperature', 'humidity', etc.
     const newState = switchElement.checked; // true if checked (enabled), false if unchecked (disabled)
+    console.log(`[LOG] handleControlToggle: control='${controlName}', newState=${newState}`); // Log toggle event
 
     if (!controlName) {
         console.error("Could not determine control name for switch:", switchElement);

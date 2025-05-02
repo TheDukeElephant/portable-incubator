@@ -534,9 +534,21 @@ class ControlManager:
 
         state_key = control_key_map[control_name]
 
-        # --- DEBUGGING ---
-        print(f"[DEBUG] Attempting set_control_state('{control_name}', {enabled}). Current in-memory: {state_key}={getattr(self, state_key, 'N/A')}")
-        # --- END DEBUGGING ---
+        # --- DETAILED LOGGING ---
+        print(f"\n--- set_control_state START ---")
+        print(f"Requested Change: control='{control_name}', enabled={enabled}")
+        # Log state BEFORE modification (within lock for consistency)
+        with self._state_lock:
+            state_before = {
+                'incubator_running': self.incubator_running,
+                'temperature_enabled': self.temperature_enabled,
+                'humidity_enabled': self.humidity_enabled,
+                'o2_enabled': self.o2_enabled,
+                'co2_enabled': self.co2_enabled,
+                'air_pump_enabled': self.air_pump_enabled,
+            }
+            print(f"State BEFORE change (in-memory): {state_before}")
+        # --- END DETAILED LOGGING ---
 
         with self._state_lock: # Acquire lock for the entire read-modify-write operation
             try:
@@ -544,7 +556,8 @@ class ControlManager:
                 current_in_memory_value = getattr(self, state_key, None)
 
                 if current_in_memory_value == enabled:
-                    print(f"{control_name} enabled state already {enabled}.")
+                    print(f"No change needed: {control_name} enabled state already {enabled}.")
+                    print(f"--- set_control_state END (No Change) ---\n")
                     return # No change needed, release lock
 
                 # 2. Update the in-memory attribute FIRST (inside lock)
@@ -564,6 +577,7 @@ class ControlManager:
                     'co2_enabled': self.co2_enabled,
                     'air_pump_enabled': self.air_pump_enabled,
                 }
+                print(f"State constructed for saving: {state_to_save}")
 
                 # 4. Save the updated state dictionary back to the file (inside lock)
                 #    Using a nested try/except specifically for the file write
@@ -571,7 +585,7 @@ class ControlManager:
                 try:
                     with open(STATE_FILE_PATH, 'w') as f:
                         json.dump(state_to_save, f, indent=4)
-                    print(f"Successfully saved state file with {state_key} = {enabled}.")
+                    print(f"Successfully saved state file.")
                 except IOError as e:
                     save_error = e
                     print(f"Error saving state to {STATE_FILE_PATH}: {e}")
@@ -639,11 +653,15 @@ class ControlManager:
                  # Consider if the in-memory state should be reverted here if an error occurred
                  # For now, just log the error.
 
+            # --- DETAILED LOGGING ---
+            print(f"--- set_control_state END ---")
+            # --- END DETAILED LOGGING ---
+
         # Lock is released automatically when exiting the 'with' block
 
     # ----------------------------------------------------
-    # Corrected indentation for __aenter__ and __aexit__
-    async def __aenter__(self):
+   # Corrected indentation for __aenter__ and __aexit__
+   async def __aenter__(self):
         """Allows using 'async with ControlManager(...)' syntax."""
         await self.start()
         return self
