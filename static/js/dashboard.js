@@ -309,9 +309,6 @@ function updateSetpoints() {
     });
 }
 
-// --- Incubator State Toggle Function ---
-function toggleIncubatorState() {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
 // --- Control Loop Enable/Disable Toggle Function ---
 function handleControlToggle(event) {
     const switchElement = event.target;
@@ -365,6 +362,10 @@ function handleControlToggle(event) {
         switchElement.disabled = false;
     });
 }
+
+// --- Incubator State Toggle Function ---
+function toggleIncubatorState() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
         displayError('WebSocket is not connected. Cannot change incubator state.');
         return;
     }
