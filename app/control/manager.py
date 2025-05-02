@@ -605,6 +605,8 @@ class ControlManager:
         self._logger.info(f"--- set_control_state START ---")
         self._logger.info(f"Requested Change: control='{control_name}', enabled={enabled}")
 
+        self._logger.info(f"Retrieved state_key: {state_key}. About to acquire lock.") # <-- ADDED DEBUG LOG
+
         with self._state_lock:
             # Log current state before change
             state_before = {
