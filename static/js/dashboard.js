@@ -161,8 +161,8 @@ function updateUI(data) {
     }
     updateChartData('temperature', data.temperature); // Update chart data
     // Update Temperature Enable Switch state (only if element exists and data is present)
-    // REMOVED: && document.activeElement !== tempEnableSwitch
-    if (tempEnableSwitch && data.temperature_enabled !== undefined) {
+    // Update Temperature Enable Switch state (only if element exists and data is present)
+    if (tempEnableSwitch && data.temperature_enabled !== undefined && document.activeElement !== tempEnableSwitch) { // Restored activeElement check
         console.log(`[LOG] updateUI: Setting tempEnableSwitch.checked = ${data.temperature_enabled}`);
         tempEnableSwitch.checked = data.temperature_enabled;
     }
@@ -184,7 +184,7 @@ function updateUI(data) {
     }
     updateChartData('humidity', data.humidity); // Update chart data
     // Update Humidity Enable Switch state
-    if (humEnableSwitch && data.humidity_enabled !== undefined /* && document.activeElement !== humEnableSwitch */) { // Removed activeElement check
+    if (humEnableSwitch && data.humidity_enabled !== undefined && document.activeElement !== humEnableSwitch) { // Restored activeElement check
         console.log(`[LOG] updateUI: Setting humEnableSwitch.checked = ${data.humidity_enabled}`);
         humEnableSwitch.checked = data.humidity_enabled;
     }
@@ -199,7 +199,7 @@ function updateUI(data) {
     }
     updateChartData('o2', data.o2); // Update chart data
     // Update O2 Enable Switch state
-    if (o2EnableSwitch && data.o2_enabled !== undefined /* && document.activeElement !== o2EnableSwitch */) { // Removed activeElement check
+    if (o2EnableSwitch && data.o2_enabled !== undefined && document.activeElement !== o2EnableSwitch) { // Restored activeElement check
         console.log(`[LOG] updateUI: Setting o2EnableSwitch.checked = ${data.o2_enabled}`);
         o2EnableSwitch.checked = data.o2_enabled;
     }
