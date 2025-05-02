@@ -605,20 +605,7 @@ class ControlManager:
         self._logger.info(f"--- set_control_state START ---")
         self._logger.info(f"Requested Change: control='{control_name}', enabled={enabled}")
 
-        self._logger.info(f"Retrieved state_key: {state_key}. About to acquire lock.") # <-- ADDED DEBUG LOG
-
         with self._state_lock:
-            # Log current state before change
-            state_before = {
-                'incubator_running': self.incubator_running,
-                'temperature_enabled': self.temperature_enabled,
-                'humidity_enabled': self.humidity_enabled,
-                'o2_enabled': self.o2_enabled,
-                # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
-                'air_pump_enabled': self.air_pump_enabled,
-            }
-            self._logger.debug(f"State BEFORE change (in-memory): {state_before}") # Use debug level
-
             # Check if change is needed
             current_value = getattr(self, state_key)
             if current_value == enabled:
@@ -630,39 +617,22 @@ class ControlManager:
             setattr(self, state_key, enabled)
             self._logger.info(f"Updated in-memory state: {state_key}={enabled}")
 
-            # Construct state dictionary from CURRENT in-memory values
-            state_to_save = {
-                'temp_setpoint': self.temp_loop.setpoint,
-                'humidity_setpoint': self.humidity_loop.setpoint,
-                'o2_setpoint': self.o2_loop.setpoint,
-                # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None, # TEMP DISABLED
-                'incubator_running': self.incubator_running,
+            # If disabling a control, ensure its actuator is turned off
+            if not enabled:
+                self._handle_control_disable(control_name)
+
+            # Save the current state to file
+            self._save_state()
+            
+            # Log the final state after change
+            state_after = {
                 'temperature_enabled': self.temperature_enabled,
                 'humidity_enabled': self.humidity_enabled,
                 'o2_enabled': self.o2_enabled,
-                # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
                 'air_pump_enabled': self.air_pump_enabled,
             }
-
-            # Log the state we are about to save
-            self._logger.info(f"State being SAVED to file: {state_to_save}") # <-- Use logger
-            # Save the current state to file
-            self._save_state(state_to_save)
-            self._logger.info(f"State successfully saved to {STATE_FILE_PATH}") # <-- Use logger
-
-            # Lock released here automatically when exiting 'with' block
-
-        # Turn off actuator immediately if disabling (AFTER releasing lock)
-        if not enabled:
-            self._logger.info(f"Control '{control_name}' DISABLED. Calling _handle_control_disable (after lock release).") # <-- Modified log
-            self._handle_control_disable(control_name)
-        else:
-            self._logger.info(f"Control '{control_name}' ENABLED. Actuator control deferred to loop.") # <-- Use logger
-
-        # Log final state after change (outside lock, reading the potentially updated value)
-        final_state_value = getattr(self, state_key)
-        self._logger.info(f"State AFTER change (in-memory): {state_key}={final_state_value}") # <-- Use logger
-        self._logger.info(f"--- set_control_state END ---")
+            self._logger.info(f"Final state after change: {state_after}")
+            self._logger.info(f"--- set_control_state END ---")
 
     def _handle_control_disable(self, control_name):
         """Helper method to handle turning off actuators when a control is disabled."""
