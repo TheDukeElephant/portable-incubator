@@ -78,34 +78,9 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
             # print(f"Warning: Failed to read temperature sensor. Using last known value: {self._current_temperature}")
             pass # Keep last known value for now
 
-    def _update_control(self):
-        """Calculates PID output and updates the heater relay state."""
-        if self._current_temperature is None:
-            # Safety measure: If we don't know the temperature, turn the heater off.
-            print("Safety: Turning heater OFF due to unknown temperature.")
-            if self._heater_on:  # Check if it was on
-                self.heater_relay.off()
-                self._heater_on = False
-            # Reset PID to prevent windup when sensor recovers
-            self.pid.reset()
-            return
-
-        # --- Control logic proceeds only if BaseLoop determined the loop is active ---
-        # Calculate PID output
-        pid_output = self.pid(self._current_temperature)
-
-        # Determine heater state based on PID output and threshold
-        new_heater_state = pid_output > self._output_threshold
-
-        if new_heater_state != self._heater_on:
-            if new_heater_state:
-                self.heater_relay.on()
-                print(f"Heater ON (Temp: {self._current_temperature:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
-            else:
-                self.heater_relay.off()
-                print(f"Heater OFF (Temp: {self._current_temperature:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
-            self._heater_on = new_heater_state
-        # else: No change in heater state
+    # def _update_control(self): # <-- REMOVE this method, logic moved to control_step
+    #     """Calculates PID output and updates the heater relay state."""
+    #     pass # Keep method signature for diff tool if needed, but logic is gone
 
     def _ensure_actuator_off(self):
         """Turns the heater relay off and resets the PID."""
@@ -128,10 +103,32 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
                  print(f"ERROR in Temp _ensure_actuator_off (ensuring off): {e}") # <-- ADDED ERROR LOG
 
     async def control_step(self):
-        """Performs a single temperature control step."""
+        """Performs a single temperature control step based on sensor reading and PID."""
         print(f"DEBUG: Temperature control_step. is_active={self._active()}") # <-- Use print and call _active()
         self._read_sensor()
-        self._update_control()
+
+        # 1. Check Sensor Status
+        if self._current_temperature is None:
+            print("Safety: Turning heater OFF due to unknown temperature.")
+            self._ensure_actuator_off() # Ensure heater is off and PID reset
+            return
+
+        # 2. Calculate PID Output (only if sensor is OK)
+        pid_output = self.pid(self._current_temperature)
+
+        # 3. Determine desired heater state
+        should_be_on = pid_output > self._output_threshold
+
+        # 4. Update Relay only if state needs to change
+        if should_be_on and not self._heater_on:
+            self.heater_relay.on()
+            self._heater_on = True
+            print(f"Heater ON (Temp: {self._current_temperature:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
+        elif not should_be_on and self._heater_on:
+            self.heater_relay.off()
+            self._heater_on = False
+            print(f"Heater OFF (Temp: {self._current_temperature:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
+        # else: No change needed
 
     # Remove the custom run() method, BaseLoop provides it.
     # async def run(self): ...

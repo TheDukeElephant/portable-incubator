@@ -93,15 +93,10 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         """Reads sensor, applies threshold logic, and updates the Argon valve relay state."""
         self._measure() # Read sensor first, updates self.current_value
 
-        # --- Handle Sensor Error/Disconnection ---
+        # 1. Check Sensor Status
         if self.current_value == "NC":
-            # Safety measure: If O2 is "NC", ensure the Argon valve is off
-            # ONLY if the loop is supposed to be active. Otherwise, BaseLoop handles it.
-            if self._active() and self._argon_valve_on: # <-- Use _active() method call
-                print("Safety: Turning Argon valve OFF due to O2 sensor reading 'NC' while loop is active.")
-                self.argon_valve_relay.off()
-                self._argon_valve_on = False
-            # Always return if sensor reading is invalid, cannot perform control.
+            print("Safety: Turning Argon valve OFF due to O2 sensor reading 'NC'.")
+            self._ensure_actuator_off() # Ensure valve is off
             return
 
         # --- Convert to float *after* checking for "NC" ---
@@ -110,28 +105,27 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         except ValueError:
             # Should not happen if HAL returns float or "NC", but good safeguard
             print(f"Error: Could not convert O2 value '{self.current_value}' to float. Turning Argon OFF.")
-            if self._argon_valve_on:
-                 self.argon_valve_relay.off()
-                 self._argon_valve_on = False
+            self._ensure_actuator_off() # Ensure valve is off
             return
 
         # --- Control logic proceeds only if BaseLoop determined the loop is active ---
+        # This check is implicitly handled by the BaseLoop.run() method calling this function only when _active() is true.
+        # However, we double-check sensor status above.
 
-        # Threshold Logic: Turn Argon ON if O2 is strictly greater than setpoint
-        # Use the validated float value for comparison
-        new_argon_valve_state = current_o2_float > self._setpoint
+        # 2. Determine desired valve state based on Threshold Logic
+        # Turn Argon ON if O2 is strictly greater than setpoint
+        should_be_on = current_o2_float > self._setpoint
 
-        # Update relay only if state changes
-        if new_argon_valve_state != self._argon_valve_on:
-            if new_argon_valve_state:
-                self.argon_valve_relay.on()
-                # Use the float value for printing
-                print(f"Argon Valve ON (O2: {current_o2_float:.2f}% > Setpoint: {self._setpoint:.1f}%)")
-            else:
-                self.argon_valve_relay.off()
-                # Use the float value for printing
-                print(f"Argon Valve OFF (O2: {current_o2_float:.2f}% <= Setpoint: {self._setpoint:.1f}%)")
-            self._argon_valve_on = new_argon_valve_state
+        # 3. Update Relay only if state needs to change
+        if should_be_on and not self._argon_valve_on:
+            self.argon_valve_relay.on()
+            self._argon_valve_on = True
+            print(f"Argon Valve ON (O2: {current_o2_float:.2f}% > Setpoint: {self._setpoint:.1f}%)")
+        elif not should_be_on and self._argon_valve_on:
+            self.argon_valve_relay.off()
+            self._argon_valve_on = False
+            print(f"Argon Valve OFF (O2: {current_o2_float:.2f}% <= Setpoint: {self._setpoint:.1f}%)")
+        # else: No change needed
 
     def _ensure_actuator_off(self):
         """Turns the argon valve relay off."""

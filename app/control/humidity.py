@@ -78,39 +78,37 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
         print(f"DEBUG: Humidity control_step. is_active={self._active()}") # <-- Use print and call _active()
         self._read_sensor() # Read sensor first
 
+        # 1. Check Sensor Status
         if self._current_humidity == "NC":
-            # Safety measure: If humidity is "NC", ensure the humidifier is off
-            # ONLY if the loop is supposed to be active. Otherwise, BaseLoop handles it.
-            if self._active() and self._humidifier_on: # <-- Use _active() method call
-                print("Safety: Turning humidifier OFF due to sensor failure while loop is active.")
-                self.humidifier_relay.off()
-                self._humidifier_on = False
-            # Always return if sensor reading is invalid, cannot perform control.
+            print("Safety: Turning humidifier OFF due to sensor failure.")
+            self._ensure_actuator_off() # Ensure humidifier is off
             return
 
         # --- Control logic proceeds only if BaseLoop determined the loop is active ---
+        # This check is implicitly handled by the BaseLoop.run() method calling this function only when _active() is true.
+        # However, we double-check sensor status above.
 
-        # Hysteresis Logic
-        new_humidifier_state = self._humidifier_on # Assume no change initially
-
+        # 2. Determine desired humidifier state based on Hysteresis
+        should_be_on = self._humidifier_on # Assume no change initially
         if self._humidifier_on:
             # If currently ON, check if humidity has risen above the OFF threshold
             if self._current_humidity >= self._turn_off_threshold:
-                new_humidifier_state = False
+                should_be_on = False
         else:
             # If currently OFF, check if humidity has fallen below the ON threshold
             if self._current_humidity <= self._turn_on_threshold:
-                new_humidifier_state = True
+                should_be_on = True
 
-        # Update relay only if state changes
-        if new_humidifier_state != self._humidifier_on:
-            if new_humidifier_state:
-                self.humidifier_relay.on()
-                print(f"Humidifier ON (Hum: {self._current_humidity:.2f}%, Setpoint: {self._setpoint:.1f}%, Threshold: <= {self._turn_on_threshold:.1f}%)")
-            else:
-                self.humidifier_relay.off()
-                print(f"Humidifier OFF (Hum: {self._current_humidity:.2f}%, Setpoint: {self._setpoint:.1f}%, Threshold: >= {self._turn_off_threshold:.1f}%)")
-            self._humidifier_on = new_humidifier_state
+        # 3. Update Relay only if state needs to change
+        if should_be_on and not self._humidifier_on:
+            self.humidifier_relay.on()
+            self._humidifier_on = True
+            print(f"Humidifier ON (Hum: {self._current_humidity:.2f}%, Setpoint: {self._setpoint:.1f}%, Threshold: <= {self._turn_on_threshold:.1f}%)")
+        elif not should_be_on and self._humidifier_on:
+            self.humidifier_relay.off()
+            self._humidifier_on = False
+            print(f"Humidifier OFF (Hum: {self._current_humidity:.2f}%, Setpoint: {self._setpoint:.1f}%, Threshold: >= {self._turn_off_threshold:.1f}%)")
+        # else: No change needed
 
     def _ensure_actuator_off(self):
         """Turns the humidifier relay off."""
