@@ -642,16 +642,22 @@ class ControlManager:
                 'air_pump_enabled': self.air_pump_enabled,
             }
 
+            # Log the state we are about to save
+            print(f"State being SAVED to file: {state_to_save}") # <-- ADDED LOG
             # Save the current state to file
             self._save_state(state_to_save)
+            print(f"State successfully saved to {STATE_FILE_PATH}") # <-- ADDED LOG
 
             # Turn off actuator immediately if disabling
             if not enabled:
+                print(f"Control '{control_name}' DISABLED. Calling _handle_control_disable.") # <-- ADDED LOG
                 self._handle_control_disable(control_name)
+            else:
+                print(f"Control '{control_name}' ENABLED. Actuator control deferred to loop.") # <-- ADDED LOG
 
         # Log final state after change (outside lock, reading the potentially updated value)
         final_state_value = getattr(self, state_key)
-        print(f"State AFTER change: {state_key}={final_state_value}")
+        print(f"State AFTER change (in-memory): {state_key}={final_state_value}") # <-- MODIFIED LOG
         print(f"--- set_control_state END ---\n")
 
     def _handle_control_disable(self, control_name):
