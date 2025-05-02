@@ -33,7 +33,8 @@ CO2_VENT_PIN = 24
 # Serial Port Configuration
 # IMPORTANT: Verify this is the correct serial port for your CO2 sensor!
 # Common options: '/dev/ttyS0' (RPi default serial), '/dev/ttyAMA0' (older RPi), '/dev/ttyUSB0' (USB adapter)
-CO2_SENSOR_PORT = '/dev/ttyS0'
+# Reverting to /dev/ttyUSB0 based on original HAL init and lack of other clear candidates
+CO2_SENSOR_PORT = '/dev/ttyUSB0'
 
 # I2C Configuration
 O2_SENSOR_ADDR = 0x73
@@ -85,7 +86,8 @@ class ControlManager:
         self.dht_sensor = DHT22Sensor(DHT_PIN)
         self.dht_sensor.start_background_initialization()
         self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # Assuming bus 1, adjust if needed
-        self.co2_sensor = CO2Sensor(url='/dev/ttyUSB0') # Pass the serial port URL
+        # Use the CO2_SENSOR_PORT constant defined above
+        self.co2_sensor = CO2Sensor(url=CO2_SENSOR_PORT)
 
         self.heater_relay = RelayOutput(HEATER_PIN, initial_value=False)
         self.humidifier_relay = RelayOutput(HUMIDIFIER_PIN, initial_value=False)
