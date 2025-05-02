@@ -78,11 +78,13 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
         self._read_sensor() # Read sensor first
 
         if self._current_humidity == "NC":
-            # Safety measure: If humidity is "NC", turn the humidifier off.
-            print("Safety: Turning humidifier OFF due to sensor failure.")
-            if self._humidifier_on: # Only act if it was on
-                 self.humidifier_relay.off()
-                 self._humidifier_on = False
+            # Safety measure: If humidity is "NC", ensure the humidifier is off
+            # ONLY if the loop is supposed to be active. Otherwise, BaseLoop handles it.
+            if self.is_active and self._humidifier_on:
+                print("Safety: Turning humidifier OFF due to sensor failure while loop is active.")
+                self.humidifier_relay.off()
+                self._humidifier_on = False
+            # Always return if sensor reading is invalid, cannot perform control.
             return
 
         # --- Control logic proceeds only if BaseLoop determined the loop is active ---

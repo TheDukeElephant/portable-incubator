@@ -95,12 +95,14 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
 
         # --- Handle Sensor Error/Disconnection ---
         if self.current_value == "NC":
-            # Safety measure: If we don't know the O2 level (error or disconnected), keep the Argon valve closed.
-            print("Safety: Turning Argon valve OFF due to O2 sensor reading 'NC'.")
-            if self._argon_valve_on: # Only act if it was on
-                 self.argon_valve_relay.off()
-                 self._argon_valve_on = False
-            return # Skip control logic if sensor reading is invalid
+            # Safety measure: If O2 is "NC", ensure the Argon valve is off
+            # ONLY if the loop is supposed to be active. Otherwise, BaseLoop handles it.
+            if self.is_active and self._argon_valve_on:
+                print("Safety: Turning Argon valve OFF due to O2 sensor reading 'NC' while loop is active.")
+                self.argon_valve_relay.off()
+                self._argon_valve_on = False
+            # Always return if sensor reading is invalid, cannot perform control.
+            return
 
         # --- Convert to float *after* checking for "NC" ---
         try:
