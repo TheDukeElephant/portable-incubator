@@ -10,13 +10,13 @@ from typing import Dict, Any, Optional, List
 from ..hal.dht_sensor import DHT22Sensor
 from ..hal.o2_sensor import DFRobot_Oxygen_IIC
 from ..hal.relay_output import RelayOutput
-from ..hal.co2_sensor import CO2Sensor # Import the new dummy sensor
+# from ..hal.co2_sensor import CO2Sensor # Import the new dummy sensor # TEMP DISABLED
 
 # Control Loop Imports
 from .temperature import TemperatureLoop
 from .humidity import HumidityLoop
 from .o2 import O2Loop
-from .co2 import CO2Loop # Import the new control loop
+# from .co2 import CO2Loop # Import the new control loop # TEMP DISABLED
 from .air_pump import AirPumpControlLoop # Import the air pump loop
 
 # Data Logger Import
@@ -87,7 +87,7 @@ class ControlManager:
         self.dht_sensor.start_background_initialization()
         self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # Assuming bus 1, adjust if needed
         # Use the CO2_SENSOR_PORT constant defined above
-        self.co2_sensor = CO2Sensor(url=CO2_SENSOR_PORT)
+        # self.co2_sensor = CO2Sensor(url=CO2_SENSOR_PORT) # TEMP DISABLED
 
         self.heater_relay = RelayOutput(HEATER_PIN, initial_value=False)
         self.humidifier_relay = RelayOutput(HUMIDIFIER_PIN, initial_value=False)
@@ -121,13 +121,13 @@ class ControlManager:
             sample_time=CONTROL_SAMPLE_TIME,
             enabled_attr="o2_enabled" # Pass the enabled attribute name
         )
-        self.co2_loop = CO2Loop(
-            manager=self, # Pass manager instance
-            co2_sensor_port=CO2_SENSOR_PORT, # Pass the configured sensor port
-            vent_relay_pin=CO2_VENT_PIN,
-            enabled_attr="co2_enabled", # Pass the enabled attribute name
-            setpoint=DEFAULT_CO2_SETPOINT
-        )
+        # self.co2_loop = CO2Loop( # TEMP DISABLED
+        #     manager=self, # Pass manager instance
+        #     co2_sensor_port=CO2_SENSOR_PORT, # Pass the configured sensor port
+        #     vent_relay_pin=CO2_VENT_PIN,
+        #     enabled_attr="co2_enabled", # Pass the enabled attribute name
+        #     setpoint=DEFAULT_CO2_SETPOINT
+        # )
         self.air_pump_loop = AirPumpControlLoop(
             manager=self, # Pass manager instance (required by BaseLoop)
             control_interval=1.0, # Use control_interval instead of interval_sec
@@ -166,12 +166,12 @@ class ControlManager:
             'temp_setpoint': DEFAULT_TEMP_SETPOINT,
             'humidity_setpoint': DEFAULT_HUMIDITY_SETPOINT,
             'o2_setpoint': DEFAULT_O2_SETPOINT,
-            'co2_setpoint': DEFAULT_CO2_SETPOINT,
+            # 'co2_setpoint': DEFAULT_CO2_SETPOINT, # TEMP DISABLED
             'incubator_running': False,
             'temperature_enabled': True,
             'humidity_enabled': True,
             'o2_enabled': True,
-            'co2_enabled': True,
+            # 'co2_enabled': True, # TEMP DISABLED
             'air_pump_enabled': True, # NEW: Add default for air pump
         }
         loaded_state = default_state.copy() # Start with defaults
@@ -217,13 +217,13 @@ class ControlManager:
             self.temp_loop.setpoint = float(state.get('temp_setpoint', DEFAULT_TEMP_SETPOINT))
             self.humidity_loop.setpoint = float(state.get('humidity_setpoint', DEFAULT_HUMIDITY_SETPOINT))
             self.o2_loop.setpoint = float(state.get('o2_setpoint', DEFAULT_O2_SETPOINT))
-            self.co2_loop.setpoint = float(state.get('co2_setpoint', DEFAULT_CO2_SETPOINT))
+            # self.co2_loop.setpoint = float(state.get('co2_setpoint', DEFAULT_CO2_SETPOINT)) # TEMP DISABLED
         except (ValueError, TypeError) as e:
-             print(f"Warning: Error applying setpoints from state: {e}. Using defaults.")
+             self._logger.warning(f"Error applying setpoints from state: {e}. Using defaults.") # Use logger
              self.temp_loop.setpoint = DEFAULT_TEMP_SETPOINT
              self.humidity_loop.setpoint = DEFAULT_HUMIDITY_SETPOINT
              self.o2_loop.setpoint = DEFAULT_O2_SETPOINT
-             self.co2_loop.setpoint = DEFAULT_CO2_SETPOINT
+             # self.co2_loop.setpoint = DEFAULT_CO2_SETPOINT # TEMP DISABLED
 
         # Apply running state
         self.incubator_running = bool(state.get('incubator_running', False))
@@ -232,7 +232,7 @@ class ControlManager:
         self.temperature_enabled = bool(state.get('temperature_enabled', True))
         self.humidity_enabled = bool(state.get('humidity_enabled', True))
         self.o2_enabled = bool(state.get('o2_enabled', True))
-        self.co2_enabled = bool(state.get('co2_enabled', True))
+        # self.co2_enabled = bool(state.get('co2_enabled', True)) # TEMP DISABLED
         self.air_pump_enabled = bool(state.get('air_pump_enabled', True)) # NEW: Apply air pump state
 
 
@@ -242,7 +242,7 @@ class ControlManager:
             self.temperature_enabled = True
             self.humidity_enabled = True
             self.o2_enabled = True
-            self.co2_enabled = True
+            # self.co2_enabled = True # TEMP DISABLED
             self.air_pump_enabled = True # NEW: Reset air pump state
             # Note: This doesn't reset setpoints or incubator_running state, only the enabled flags.
 
@@ -259,22 +259,22 @@ class ControlManager:
                         'temperature_enabled': status.get('temperature_enabled'),
                         'humidity_enabled': status.get('humidity_enabled'),
                         'o2_enabled': status.get('o2_enabled'),
-                        'co2_enabled': status.get('co2_enabled'),
+                        # 'co2_enabled': status.get('co2_enabled'), # TEMP DISABLED
                         'air_pump_enabled': status.get('air_pump_enabled'), # NEW: Log air pump enabled state
                         # ---------------------------------
                         'temperature': status.get('temperature'),
                         'humidity': status.get('humidity'),
                         'o2': status.get('o2'),
-                        'co2': status.get('co2_ppm'),
+                        # 'co2': status.get('co2_ppm'), # TEMP DISABLED
                         'temp_setpoint': status.get('temp_setpoint'),
                         'humidity_setpoint': status.get('humidity_setpoint'),
                         'o2_setpoint': status.get('o2_setpoint'),
-                        'co2_setpoint': status.get('co2_setpoint_ppm'),
+                        # 'co2_setpoint': status.get('co2_setpoint_ppm'), # TEMP DISABLED
                         # Log actuator states as reported by loops (which consider incubator_running AND enabled flags)
                         'heater_on': status.get('heater_on'),
                         'humidifier_on': status.get('humidifier_on'),
                         'argon_valve_on': status.get('argon_valve_on'),
-                        'vent_active': status.get('vent_active'),
+                        # 'vent_active': status.get('vent_active'), # TEMP DISABLED
                         'air_pump_on': status.get('air_pump_on'),
                         'air_pump_speed': status.get('air_pump_speed'),
                     }
@@ -319,7 +319,7 @@ class ControlManager:
                 asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
                 asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
                 asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
-                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                # asyncio.create_task(self.co2_loop.run(), name="CO2Loop"), # TEMP DISABLED
                 asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"),
                 asyncio.create_task(self._logging_task(), name="LoggingTask")
             ]
@@ -367,7 +367,7 @@ class ControlManager:
         if hasattr(self, 'heater_relay'): self.heater_relay.close()
         if hasattr(self, 'humidifier_relay'): self.humidifier_relay.close()
         if hasattr(self, 'argon_valve_relay'): self.argon_valve_relay.close()
-        if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: self.co2_loop.vent_relay.close()
+        # if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: self.co2_loop.vent_relay.close() # TEMP DISABLED
         if hasattr(self, 'o2_sensor'): self.o2_sensor.close()
         # DHT sensor and dummy CO2 sensor don't have close methods
 
@@ -394,7 +394,7 @@ class ControlManager:
             await self.temp_loop.stop()
             await self.humidity_loop.stop()
             await self.o2_loop.stop()
-            await self.co2_loop.stop()
+            # await self.co2_loop.stop() # TEMP DISABLED
             await self.air_pump_loop.stop() # Stop the air pump loop
 
             # Cancel all running tasks gracefully (includes logger)
@@ -420,8 +420,8 @@ class ControlManager:
             self.heater_relay.close()
             self.humidifier_relay.close()
             self.argon_valve_relay.close()
-            if self.co2_loop.vent_relay:
-                 self.co2_loop.vent_relay.close()
+            # if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: # TEMP DISABLED
+            #      self.co2_loop.vent_relay.close() # TEMP DISABLED
             self.o2_sensor.close()
             # DHT sensor and dummy CO2 sensor don't have close methods
 
@@ -449,8 +449,8 @@ class ControlManager:
             self.humidifier_relay.off()
         if not self.o2_enabled:
             self.argon_valve_relay.off()
-        if not self.co2_enabled and self.co2_loop.vent_relay:
-            self.co2_loop.vent_relay.off()
+        # if not self.co2_enabled and hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: # TEMP DISABLED
+        #     self.co2_loop.vent_relay.off() # TEMP DISABLED
             # Loops are already running, changing the flag enables control (if individually enabled)
             # self._save_state() # REMOVED: Don't save state on main toggle
 
@@ -472,21 +472,21 @@ class ControlManager:
         self.heater_relay.off()
         self.humidifier_relay.off()
         self.argon_valve_relay.off()
-        if self.co2_loop.vent_relay:
-            self.co2_loop.vent_relay.off()
-            # if self._manager_active: # Only save state if manager is active
-            #      self._save_state() # REMOVED: Don't save state on main toggle
+        # if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: # TEMP DISABLED
+        #     self.co2_loop.vent_relay.off() # TEMP DISABLED
+        # if self._manager_active: # Only save state if manager is active # <-- Corrected Indent
+        #      self._save_state() # REMOVED: Don't save state on main toggle # <-- Corrected Indent
 
-            # Explicitly turn off all actuators immediately
-            print("Ensuring actuators are off...")
-            self.heater_relay.off()
-            self.humidifier_relay.off()
-            self.argon_valve_relay.off()
-            if self.co2_loop.vent_relay:
-                self.co2_loop.vent_relay.off()
-            if self.air_pump_loop and self.air_pump_loop.motor:
-                self.air_pump_loop.motor.stop() # Explicitly stop the pump motor
-            # Loops will continue running but won't activate relays while flag is False
+        # Explicitly turn off all actuators immediately
+        print("Ensuring actuators are off...") # <-- Corrected Indent
+        self.heater_relay.off() # <-- Corrected Indent
+        self.humidifier_relay.off() # <-- Corrected Indent
+        self.argon_valve_relay.off() # <-- Corrected Indent
+        # if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: # TEMP DISABLED # <-- Corrected Indent
+        #     self.co2_loop.vent_relay.off() # TEMP DISABLED # <-- Corrected Indent
+        if self.air_pump_loop and self.air_pump_loop.motor: # <-- Corrected Indent
+            self.air_pump_loop.motor.stop() # Explicitly stop the pump motor # <-- Corrected Indent
+        # Loops will continue running but won't activate relays while flag is False # <-- Corrected Indent
 
 
     def get_status(self) -> Dict[str, Any]:
@@ -495,7 +495,7 @@ class ControlManager:
             temp_status = self.temp_loop.get_status()
             hum_status = self.humidity_loop.get_status()
             o2_status = self.o2_loop.get_status()
-            co2_status = self.co2_loop.get_status()
+            # co2_status = self.co2_loop.get_status() if hasattr(self, 'co2_loop') else {} # TEMP DISABLED
             air_pump_status = self.air_pump_loop.get_status() if hasattr(self, 'air_pump_loop') else {} # Get air pump status safely
 
             status = {
@@ -505,7 +505,7 @@ class ControlManager:
                 "temperature_enabled": self.temperature_enabled,
                 "humidity_enabled": self.humidity_enabled,
                 "o2_enabled": self.o2_enabled,
-                "co2_enabled": self.co2_enabled,
+                # "co2_enabled": self.co2_enabled, # TEMP DISABLED
                 "air_pump_enabled": self.air_pump_enabled, # NEW: Report air pump enabled state
                 # ---------------------------------
                 "temperature": temp_status.get("temperature"),
@@ -517,9 +517,9 @@ class ControlManager:
                 "o2": o2_status.get("o2"),
                 "o2_setpoint": o2_status.get("setpoint"),
                 "argon_valve_on": o2_status.get("argon_valve_on"), # This should reflect both flags via loop's property
-                "co2_ppm": co2_status.get("co2_ppm"),
-                "co2_setpoint_ppm": co2_status.get("setpoint_ppm"),
-                "vent_active": co2_status.get("vent_active"), # This should reflect both flags via loop's property
+                # "co2_ppm": co2_status.get("co2_ppm"), # TEMP DISABLED
+                # "co2_setpoint_ppm": co2_status.get("setpoint_ppm"), # TEMP DISABLED
+                # "vent_active": co2_status.get("vent_active"), # TEMP DISABLED
                 "air_pump_on": air_pump_status.get("pump_on", False),
                 "air_pump_speed": air_pump_status.get("speed_percent", 0),
             }
@@ -541,9 +541,9 @@ class ControlManager:
                 if 'o2' in setpoints and self.o2_loop.setpoint != float(setpoints['o2']):
                     self.o2_loop.setpoint = float(setpoints['o2'])
                     changed = True
-                if 'co2' in setpoints and self.co2_loop.setpoint != float(setpoints['co2']):
-                    self.co2_loop.setpoint = float(setpoints['co2'])
-                    changed = True
+                # if 'co2' in setpoints and hasattr(self, 'co2_loop') and self.co2_loop.setpoint != float(setpoints['co2']): # TEMP DISABLED
+                #     self.co2_loop.setpoint = float(setpoints['co2']) # TEMP DISABLED
+                #     changed = True # TEMP DISABLED
             except ValueError as e:
                 print(f"Error updating setpoints: Invalid value type - {e}")
             except Exception as e:
@@ -556,12 +556,12 @@ class ControlManager:
                         'temp_setpoint': self.temp_loop.setpoint,
                         'humidity_setpoint': self.humidity_loop.setpoint,
                         'o2_setpoint': self.o2_loop.setpoint,
-                        'co2_setpoint': self.co2_loop.setpoint,
+                        # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None, # TEMP DISABLED
                         'incubator_running': self.incubator_running,
                         'temperature_enabled': self.temperature_enabled,
                         'humidity_enabled': self.humidity_enabled,
                         'o2_enabled': self.o2_enabled,
-                        'co2_enabled': self.co2_enabled,
+                        # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
                         'air_pump_enabled': self.air_pump_enabled, # NEW: Save air pump state
                     }
                     self._save_state(current_state)
@@ -575,8 +575,8 @@ class ControlManager:
                 return self.humidity_enabled
             elif control_name == "o2":
                 return self.o2_enabled
-            elif control_name == "co2":
-                return self.co2_enabled
+            # elif control_name == "co2": # TEMP DISABLED
+            #     return self.co2_enabled # TEMP DISABLED
             elif control_name == "air_pump": # NEW: Get air pump state
                 return self.air_pump_enabled
             else:
@@ -591,7 +591,7 @@ class ControlManager:
             "temperature": "temperature_enabled",
             "humidity": "humidity_enabled",
             "o2": "o2_enabled",
-            "co2": "co2_enabled",
+            # "co2": "co2_enabled", # TEMP DISABLED
             "air_pump": "air_pump_enabled",
         }
 
@@ -601,9 +601,9 @@ class ControlManager:
 
         state_key = control_key_map[control_name]
 
-        # Log the requested change
-        print(f"\n--- set_control_state START ---")
-        print(f"Requested Change: control='{control_name}', enabled={enabled}")
+        # Log the requested change using the logger
+        self._logger.info(f"--- set_control_state START ---")
+        self._logger.info(f"Requested Change: control='{control_name}', enabled={enabled}")
 
         with self._state_lock:
             # Log current state before change
@@ -612,53 +612,53 @@ class ControlManager:
                 'temperature_enabled': self.temperature_enabled,
                 'humidity_enabled': self.humidity_enabled,
                 'o2_enabled': self.o2_enabled,
-                'co2_enabled': self.co2_enabled,
+                # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
                 'air_pump_enabled': self.air_pump_enabled,
             }
-            print(f"State BEFORE change (in-memory): {state_before}")
+            self._logger.debug(f"State BEFORE change (in-memory): {state_before}") # Use debug level
 
             # Check if change is needed
             current_value = getattr(self, state_key)
             if current_value == enabled:
-                print(f"No change needed: {control_name} enabled state already {enabled}.")
-                print(f"--- set_control_state END (No Change) ---\n")
+                self._logger.info(f"No change needed: {control_name} enabled state already {enabled}.")
+                self._logger.info(f"--- set_control_state END (No Change) ---")
                 return # Exit early if no change
 
             # Update ONLY the in-memory attribute for this specific control
             setattr(self, state_key, enabled)
-            print(f"Updated in-memory state: {state_key}={enabled}")
+            self._logger.info(f"Updated in-memory state: {state_key}={enabled}")
 
             # Construct state dictionary from CURRENT in-memory values
             state_to_save = {
                 'temp_setpoint': self.temp_loop.setpoint,
                 'humidity_setpoint': self.humidity_loop.setpoint,
                 'o2_setpoint': self.o2_loop.setpoint,
-                'co2_setpoint': self.co2_loop.setpoint,
+                # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None, # TEMP DISABLED
                 'incubator_running': self.incubator_running,
                 'temperature_enabled': self.temperature_enabled,
                 'humidity_enabled': self.humidity_enabled,
                 'o2_enabled': self.o2_enabled,
-                'co2_enabled': self.co2_enabled,
+                # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
                 'air_pump_enabled': self.air_pump_enabled,
             }
 
             # Log the state we are about to save
-            print(f"State being SAVED to file: {state_to_save}") # <-- ADDED LOG
+            self._logger.info(f"State being SAVED to file: {state_to_save}") # <-- Use logger
             # Save the current state to file
             self._save_state(state_to_save)
-            print(f"State successfully saved to {STATE_FILE_PATH}") # <-- ADDED LOG
+            self._logger.info(f"State successfully saved to {STATE_FILE_PATH}") # <-- Use logger
 
             # Turn off actuator immediately if disabling
             if not enabled:
-                print(f"Control '{control_name}' DISABLED. Calling _handle_control_disable.") # <-- ADDED LOG
+                self._logger.info(f"Control '{control_name}' DISABLED. Calling _handle_control_disable.") # <-- Use logger
                 self._handle_control_disable(control_name)
             else:
-                print(f"Control '{control_name}' ENABLED. Actuator control deferred to loop.") # <-- ADDED LOG
+                self._logger.info(f"Control '{control_name}' ENABLED. Actuator control deferred to loop.") # <-- Use logger
 
         # Log final state after change (outside lock, reading the potentially updated value)
         final_state_value = getattr(self, state_key)
-        print(f"State AFTER change (in-memory): {state_key}={final_state_value}") # <-- MODIFIED LOG
-        print(f"--- set_control_state END ---\n")
+        self._logger.info(f"State AFTER change (in-memory): {state_key}={final_state_value}") # <-- Use logger
+        self._logger.info(f"--- set_control_state END ---")
 
     def _handle_control_disable(self, control_name):
         """Helper method to handle turning off actuators when a control is disabled."""
@@ -686,15 +686,15 @@ class ControlManager:
             except Exception as e:
                 self._logger.error(f"Failed to turn off argon valve relay: {e}", exc_info=True)
 
-        elif control_name == "co2":
-            if self.co2_loop.vent_relay:
-                self._logger.info("Turning off vent relay.")
-                try:
-                    self.co2_loop.vent_relay.off()
-                except Exception as e:
-                    self._logger.error(f"Failed to turn off vent relay: {e}", exc_info=True)
-            if hasattr(self.co2_loop, 'reset_control'):
-                self.co2_loop.reset_control()
+        # elif control_name == "co2": # TEMP DISABLED
+        #     if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: # TEMP DISABLED
+        #         self._logger.info("Turning off vent relay.") # TEMP DISABLED
+        #         try: # TEMP DISABLED
+        #             self.co2_loop.vent_relay.off() # TEMP DISABLED
+        #         except Exception as e: # TEMP DISABLED
+        #             self._logger.error(f"Failed to turn off vent relay: {e}", exc_info=True) # TEMP DISABLED
+        #     if hasattr(self.co2_loop, 'reset_control'): # TEMP DISABLED
+        #         self.co2_loop.reset_control() # TEMP DISABLED
 
         elif control_name == "air_pump":
             if self.air_pump_loop and self.air_pump_loop.motor:
