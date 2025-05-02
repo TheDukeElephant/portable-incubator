@@ -296,19 +296,85 @@ class ControlManager:
 
     async def start(self):
         """Initializes logger, starts all control loops and the logging task."""
-        print("[DEBUG] ControlManager.start() called. Initializing tasks...")
+        print("ControlManager: Starting background tasks...")
         if self._manager_active:
-            print("Control Manager already started.")
+            print("ControlManager: Already started.")
             return
-    
+
+        try:
+            # 1. Initialize Logger DB Connection
+            print("  Initializing logger database connection...")
+            await self.logger.initialize()
+            print("  Logger database initialized.")
+
+            # 2. Mark manager as active *before* starting tasks
+            self._manager_active = True
+            print("  Manager marked as active.")
+
+            # 3. Start Control Loops and Logging Task
+            print("  Starting control loops and logging task...")
+            self._running_tasks = [
+                asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
+                asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
+                asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
+                asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"),
+                asyncio.create_task(self._logging_task(), name="LoggingTask")
+            ]
+            print(f"  {len(self._running_tasks)} background tasks created.")
+
+            # Short delay to allow tasks to start up and potentially fail early
+            await asyncio.sleep(0.1)
+
+            # Check if any tasks failed immediately
+            for task in self._running_tasks:
+                if task.done() and task.exception():
+                    raise task.exception() # Raise the exception from the failed task
+
+            print("ControlManager: All background tasks started successfully.")
+
+        except Exception as e:
+            print(f"ControlManager: Error during startup: {e}")
+            self._manager_active = False # Ensure manager is marked inactive on startup failure
+            # Attempt cleanup
+            print("ControlManager: Attempting cleanup after startup failure...")
+            await self._cleanup_after_failure()
+            # Re-raise the exception so the caller knows startup failed
+            raise
 
     async def _cleanup_after_failure(self):
-        """Performs cleanup tasks after a failure during startup."""
-        try:
-            await self.logger.close() # Ensure logger is closed if init failed
-            await self.stop()
-        except Exception as cleanup_error:
-            print(f"Error during cleanup: {cleanup_error}")
+        """Performs cleanup tasks after a failure during startup or normal stop."""
+        print("ControlManager: Running cleanup...")
+        # Ensure actuators are off
+        await self.stop_incubator(force_off=True)
+
+        # Stop any potentially running tasks (even if startup failed partway)
+        tasks_to_cancel = list(self._running_tasks) # Use the stored list
+        self._running_tasks = [] # Clear the list
+
+        for task in tasks_to_cancel:
+             if task and not task.done():
+                 task.cancel()
+        if tasks_to_cancel:
+             print(f"  Waiting for {len(tasks_to_cancel)} tasks to cancel...")
+             await asyncio.gather(*[t for t in tasks_to_cancel if t], return_exceptions=True)
+             print("  Tasks cancelled.")
+
+        # Clean up HAL components (ensure this is safe even if not fully initialized)
+        print("  Closing HAL components...")
+        if hasattr(self, 'heater_relay'): self.heater_relay.close()
+        if hasattr(self, 'humidifier_relay'): self.humidifier_relay.close()
+        if hasattr(self, 'argon_valve_relay'): self.argon_valve_relay.close()
+        if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: self.co2_loop.vent_relay.close()
+        if hasattr(self, 'o2_sensor'): self.o2_sensor.close()
+        # DHT sensor and dummy CO2 sensor don't have close methods
+
+        # Close logger connection if it was initialized
+        if hasattr(self, 'logger') and self.logger.is_initialized():
+             print("  Closing logger database connection...")
+             await self.logger.close()
+             print("  Logger closed.")
+        print("ControlManager: Cleanup finished.")
 
     async def stop(self):
             """Stops all background tasks, cleans up HAL, and closes logger."""
