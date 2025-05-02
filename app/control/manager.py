@@ -412,7 +412,6 @@ class ControlManager:
     print("Starting Control Manager and background tasks...")
     try:
         # Initialize logger database connection
-        await self.logger.initialize()
 
         self._manager_active = True
         # Start control loops immediately. They will run but respect incubator_running AND enabled flags.
@@ -431,10 +430,16 @@ class ControlManager:
     except Exception as e:
         print(f"Error starting Control Manager: {e}")
         self._manager_active = False
-        await self.logger.close() # Ensure logger is closed if init failed
-        # Attempt cleanup if start failed partially
-        await self.stop()
-        raise # Re-raise the exception
+        await self._cleanup_after_failure()
+        raise # Re-raise the original exception
+
+    async def _cleanup_after_failure(self):
+        """Performs cleanup tasks after a failure during startup."""
+        try:
+            await self.logger.close() # Ensure logger is closed if init failed
+            await self.stop()
+        except Exception as cleanup_error:
+            print(f"Error during cleanup: {cleanup_error}")
 
     async def stop(self):
             """Stops all background tasks, cleans up HAL, and closes logger."""
