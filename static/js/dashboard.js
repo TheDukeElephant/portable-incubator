@@ -161,7 +161,8 @@ function updateUI(data) {
     }
     updateChartData('temperature', data.temperature); // Update chart data
     // Update Temperature Enable Switch state (only if element exists and data is present)
-    if (tempEnableSwitch && data.temperature_enabled !== undefined && document.activeElement !== tempEnableSwitch) {
+    // REMOVED: && document.activeElement !== tempEnableSwitch
+    if (tempEnableSwitch && data.temperature_enabled !== undefined) {
         console.log(`[LOG] updateUI: Setting tempEnableSwitch.checked = ${data.temperature_enabled}`);
         tempEnableSwitch.checked = data.temperature_enabled;
     }
