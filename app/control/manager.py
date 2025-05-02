@@ -144,18 +144,32 @@ class ControlManager:
         self._load_state()
 
 
-    def _save_state(self, state_to_save: Dict[str, Any]):
-        """Saves the provided state dictionary to a JSON file."""
-        with self._state_lock: # Acquire lock before writing state
-            try:
-                with open(STATE_FILE_PATH, 'w') as f:
-                    json.dump(state_to_save, f, indent=4)
-                # print(f"Saved state: {state_to_save}") # Debugging
-            except IOError as e:
-                print(f"Error saving state to {STATE_FILE_PATH}: {e}")
-            except Exception as e:
-                print(f"Unexpected error saving state: {e}")
-        # Lock is released automatically when exiting 'with' block
+    def _save_state(self, state=None):
+        """
+        Saves the current state to a JSON file.
+        If state is provided, uses that; otherwise builds state from current attributes.
+        """
+        if state is None:
+            # Build state from current attributes if not provided
+            state = {
+                'temp_setpoint': self.temp_loop.setpoint,
+                'humidity_setpoint': self.humidity_loop.setpoint,
+                'o2_setpoint': self.o2_loop.setpoint,
+                # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else DEFAULT_CO2_SETPOINT, # TEMP DISABLED
+                'incubator_running': self.incubator_running,
+                'temperature_enabled': self.temperature_enabled,
+                'humidity_enabled': self.humidity_enabled,
+                'o2_enabled': self.o2_enabled,
+                # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
+                'air_pump_enabled': self.air_pump_enabled,
+            }
+        
+        try:
+            with open(STATE_FILE_PATH, 'w') as f:
+                json.dump(state, f, indent=2)
+            self._logger.info(f"State saved to {STATE_FILE_PATH}")
+        except Exception as e:
+            self._logger.error(f"Error saving state to {STATE_FILE_PATH}: {e}")
 
     def _load_state(self) -> Dict[str, Any]:
         """
@@ -602,91 +616,38 @@ class ControlManager:
         state_key = control_key_map[control_name]
 
         # Log the requested change using the logger
-        self._logger.info(f"--- set_control_state START ---")
-        self._logger.info(f"Requested Change: control='{control_name}', enabled={enabled}")
+        self._logger.info(f"Setting {control_name} to {enabled}")
 
-        with self._state_lock:
-            # Check if change is needed
-            current_value = getattr(self, state_key)
-            if current_value == enabled:
-                self._logger.info(f"No change needed: {control_name} enabled state already {enabled}.")
-                self._logger.info(f"--- set_control_state END (No Change) ---")
-                return # Exit early if no change
-
-            # Update ONLY the in-memory attribute for this specific control
-            setattr(self, state_key, enabled)
-            self._logger.info(f"Updated in-memory state: {state_key}={enabled}")
-
-            # If disabling a control, ensure its actuator is turned off
-            if not enabled:
-                self._handle_control_disable(control_name)
-
-            try:
-                # Construct state dictionary from CURRENT in-memory values
-                state_to_save = {
-                    'temp_setpoint': self.temp_loop.setpoint,
-                    'humidity_setpoint': self.humidity_loop.setpoint,
-                    'o2_setpoint': self.o2_loop.setpoint,
-                    # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None, # TEMP DISABLED
-                    'incubator_running': self.incubator_running,
-                    'temperature_enabled': self.temperature_enabled,
-                    'humidity_enabled': self.humidity_enabled,
-                    'o2_enabled': self.o2_enabled,
-                    # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
-                    'air_pump_enabled': self.air_pump_enabled,
-                }
-                
-                # Save the state to file
-                self._save_state(state_to_save)
-                
-                # Log the final state after change
-                self._logger.info(f"Final state after change: {state_key}={getattr(self, state_key)}")
-                self._logger.info(f"--- set_control_state END ---")
-            except Exception as e:
-                self._logger.error(f"Error saving state in set_control_state: {e}")
-                # Continue execution - we've already changed the in-memory state
-
-    def _handle_control_disable(self, control_name):
-        """Helper method to handle turning off actuators when a control is disabled."""
-        print(f"Kill Switch: Disabling {control_name} and turning off actuator.")
-
-        if control_name == "temperature":
-            self._logger.info("Turning off heater relay.")
-            try:
-                self.heater_relay.off()
-                self.temp_loop.pid.reset()
-            except Exception as e:
-                self._logger.error(f"Failed to turn off heater relay: {e}", exc_info=True)
-
-        elif control_name == "humidity":
-            self._logger.info("Turning off humidifier relay.")
-            try:
-                self.humidifier_relay.off()
-            except Exception as e:
-                self._logger.error(f"Failed to turn off humidifier relay: {e}", exc_info=True)
-
-        elif control_name == "o2":
-            self._logger.info("Turning off argon valve relay.")
-            try:
-                self.argon_valve_relay.off()
-            except Exception as e:
-                self._logger.error(f"Failed to turn off argon valve relay: {e}", exc_info=True)
-
-        # elif control_name == "co2": # TEMP DISABLED
-        #     if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: # TEMP DISABLED
-        #         self._logger.info("Turning off vent relay.") # TEMP DISABLED
-        #         try: # TEMP DISABLED
-        #             self.co2_loop.vent_relay.off() # TEMP DISABLED
-        #         except Exception as e: # TEMP DISABLED
-        #             self._logger.error(f"Failed to turn off vent relay: {e}", exc_info=True) # TEMP DISABLED
-        #     if hasattr(self.co2_loop, 'reset_control'): # TEMP DISABLED
-        #         self.co2_loop.reset_control() # TEMP DISABLED
-
-        elif control_name == "air_pump":
-            if self.air_pump_loop and self.air_pump_loop.motor:
-                self.air_pump_loop.motor.stop()
-                if hasattr(self.air_pump_loop, 'reset_control'):
+        # Update the in-memory attribute for this specific control
+        setattr(self, state_key, enabled)
+        
+        # If disabling a control, ensure its actuator is turned off
+        if not enabled:
+            if control_name == "temperature" and hasattr(self, "temp_loop"):
+                self.temp_loop._ensure_actuator_off()
+            elif control_name == "humidity" and hasattr(self, "humidity_loop"):
+                self.humidity_loop._ensure_actuator_off()
+            elif control_name == "o2" and hasattr(self, "o2_loop"):
+                self.o2_loop._ensure_actuator_off()
+            elif control_name == "air_pump" and hasattr(self, "air_pump_loop"):
+                if hasattr(self.air_pump_loop, "reset_control"):
                     self.air_pump_loop.reset_control()
+        
+        # Save the current state to file
+        try:
+            current_state = {
+                'temp_setpoint': self.temp_loop.setpoint,
+                'humidity_setpoint': self.humidity_loop.setpoint,
+                'o2_setpoint': self.o2_loop.setpoint,
+                'incubator_running': self.incubator_running,
+                'temperature_enabled': self.temperature_enabled,
+                'humidity_enabled': self.humidity_enabled,
+                'o2_enabled': self.o2_enabled,
+                'air_pump_enabled': self.air_pump_enabled,
+            }
+            self._save_state(current_state)
+        except Exception as e:
+            self._logger.error(f"Error saving state: {e}")
 
     # ----------------------------------------------------
     # Corrected indentation for __aenter__ and __aexit__
