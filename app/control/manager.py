@@ -621,18 +621,30 @@ class ControlManager:
             if not enabled:
                 self._handle_control_disable(control_name)
 
-            # Save the current state to file
-            self._save_state()
-            
-            # Log the final state after change
-            state_after = {
-                'temperature_enabled': self.temperature_enabled,
-                'humidity_enabled': self.humidity_enabled,
-                'o2_enabled': self.o2_enabled,
-                'air_pump_enabled': self.air_pump_enabled,
-            }
-            self._logger.info(f"Final state after change: {state_after}")
-            self._logger.info(f"--- set_control_state END ---")
+            try:
+                # Construct state dictionary from CURRENT in-memory values
+                state_to_save = {
+                    'temp_setpoint': self.temp_loop.setpoint,
+                    'humidity_setpoint': self.humidity_loop.setpoint,
+                    'o2_setpoint': self.o2_loop.setpoint,
+                    # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None, # TEMP DISABLED
+                    'incubator_running': self.incubator_running,
+                    'temperature_enabled': self.temperature_enabled,
+                    'humidity_enabled': self.humidity_enabled,
+                    'o2_enabled': self.o2_enabled,
+                    # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
+                    'air_pump_enabled': self.air_pump_enabled,
+                }
+                
+                # Save the state to file
+                self._save_state(state_to_save)
+                
+                # Log the final state after change
+                self._logger.info(f"Final state after change: {state_key}={getattr(self, state_key)}")
+                self._logger.info(f"--- set_control_state END ---")
+            except Exception as e:
+                self._logger.error(f"Error saving state in set_control_state: {e}")
+                # Continue execution - we've already changed the in-memory state
 
     def _handle_control_disable(self, control_name):
         """Helper method to handle turning off actuators when a control is disabled."""
