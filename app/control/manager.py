@@ -650,12 +650,14 @@ class ControlManager:
             self._save_state(state_to_save)
             self._logger.info(f"State successfully saved to {STATE_FILE_PATH}") # <-- Use logger
 
-            # Turn off actuator immediately if disabling
-            if not enabled:
-                self._logger.info(f"Control '{control_name}' DISABLED. Calling _handle_control_disable.") # <-- Use logger
-                self._handle_control_disable(control_name)
-            else:
-                self._logger.info(f"Control '{control_name}' ENABLED. Actuator control deferred to loop.") # <-- Use logger
+            # Lock released here automatically when exiting 'with' block
+
+        # Turn off actuator immediately if disabling (AFTER releasing lock)
+        if not enabled:
+            self._logger.info(f"Control '{control_name}' DISABLED. Calling _handle_control_disable (after lock release).") # <-- Modified log
+            self._handle_control_disable(control_name)
+        else:
+            self._logger.info(f"Control '{control_name}' ENABLED. Actuator control deferred to loop.") # <-- Use logger
 
         # Log final state after change (outside lock, reading the potentially updated value)
         final_state_value = getattr(self, state_key)
