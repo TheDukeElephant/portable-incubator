@@ -167,6 +167,10 @@ def set_control_state(control_name):
 
     enabled_value = data['enabled']
 
+    # --- ADDED DEBUG PRINT ---
+    print(f"!!! Flask route /api/control/{control_name}/state received POST request. Enabled: {enabled_value}")
+    # -------------------------
+
     # Set the state using the manager's method (synchronous)
     manager.set_control_state(control_name, enabled_value)
 
