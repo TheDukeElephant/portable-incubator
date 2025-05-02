@@ -109,14 +109,16 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
     def _ensure_actuator_off(self):
         """Turns the heater relay off and resets the PID."""
+        self._logger.info(f"Temperature _ensure_actuator_off called. Current heater state: {self._heater_on}") # <-- ADDED LOG
         if self.heater_relay and self._heater_on:
-            print("Temperature loop inactive: Turning heater OFF and resetting PID.")
+            self._logger.info("Temperature loop inactive: Turning heater OFF and resetting PID.") # <-- Use logger
             self.heater_relay.off()
             self._heater_on = False
             self.pid.reset() # Reset PID when loop becomes inactive
 
     async def control_step(self):
         """Performs a single temperature control step."""
+        self._logger.debug(f"Temperature control_step. is_active={self.is_active}") # <-- ADDED LOG
         self._read_sensor()
         self._update_control()
 

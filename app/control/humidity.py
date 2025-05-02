@@ -75,6 +75,7 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
 
     async def control_step(self):
         """Reads sensor, applies hysteresis logic, and updates the humidifier relay state."""
+        self._logger.debug(f"Humidity control_step. is_active={self.is_active}") # <-- ADDED LOG
         self._read_sensor() # Read sensor first
 
         if self._current_humidity == "NC":
@@ -113,8 +114,9 @@ class HumidityLoop(BaseLoop): # Inherit from BaseLoop
 
     def _ensure_actuator_off(self):
         """Turns the humidifier relay off."""
+        self._logger.info(f"Humidity _ensure_actuator_off called. Current humidifier state: {self._humidifier_on}") # <-- ADDED LOG
         if self.humidifier_relay and self._humidifier_on:
-            print("Humidity loop inactive: Turning humidifier OFF.")
+            self._logger.info("Humidity loop inactive: Turning humidifier OFF.") # <-- Use logger
             self.humidifier_relay.off()
             self._humidifier_on = False
 
