@@ -555,9 +555,9 @@ class ControlManager:
                 if 'o2' in setpoints and self.o2_loop.setpoint != float(setpoints['o2']):
                     self.o2_loop.setpoint = float(setpoints['o2'])
                     changed = True
-                # if 'co2' in setpoints and hasattr(self, 'co2_loop') and self.co2_loop.setpoint != float(setpoints['co2']): # TEMP DISABLED
-                #     self.co2_loop.setpoint = float(setpoints['co2']) # TEMP DISABLED
-                #     changed = True # TEMP DISABLED
+                if 'co2' in setpoints and hasattr(self, 'co2_loop') and self.co2_loop.setpoint != float(setpoints['co2']):
+                    self.co2_loop.setpoint = float(setpoints['co2'])
+                    changed = True
             except ValueError as e:
                 print(f"Error updating setpoints: Invalid value type - {e}")
             except Exception as e:
@@ -570,7 +570,7 @@ class ControlManager:
                         'temp_setpoint': self.temp_loop.setpoint,
                         'humidity_setpoint': self.humidity_loop.setpoint,
                         'o2_setpoint': self.o2_loop.setpoint,
-                        # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None, # TEMP DISABLED
+                        'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None,
                         'incubator_running': self.incubator_running,
                         'temperature_enabled': self.temperature_enabled,
                         'humidity_enabled': self.humidity_enabled,
