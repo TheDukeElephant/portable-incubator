@@ -283,7 +283,7 @@ function updateSetpoints() {
         return;
     }
 
-    console.log("Sending setpoints:", setpoints);
+    console.log("Sending setpoints to /api/setpoints:", setpoints);
     displayError(''); // Clear previous errors
 
     fetch('/api/setpoints', {
