@@ -34,7 +34,7 @@ CO2_VENT_PIN = 24
 # IMPORTANT: Verify this is the correct serial port for your CO2 sensor!
 # Common options: '/dev/ttyS0' (RPi default serial), '/dev/ttyAMA0' (older RPi), '/dev/ttyUSB0' (USB adapter)
 # Reverting to /dev/ttyUSB0 based on original HAL init and lack of other clear candidates
-CO2_SENSOR_PORT = '/dev/ttyUSB0'
+CO2_SENSOR_PORT = '/dev/ttyS0'
 
 # I2C Configuration
 O2_SENSOR_ADDR = 0x73
