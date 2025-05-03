@@ -605,7 +605,7 @@ class ControlManager:
             "temperature": "temperature_enabled",
             "humidity": "humidity_enabled",
             "o2": "o2_enabled",
-            # "co2": "co2_enabled", # TEMP DISABLED
+            "co2": "co2_enabled",
             "air_pump": "air_pump_enabled",
         }
 
