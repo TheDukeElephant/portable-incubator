@@ -43,6 +43,8 @@ The system follows a layered architecture:
 | Heater Relay       | Digital   | 17              | General Purpose Output    |
 | Humidifier Relay   | Digital   | 27              | General Purpose Output    |
 | Air Pump Relay     | Digital   | 22              | General Purpose Output    |
+| CO2 Vent Relay     | Digital   | 24              | General Purpose Output    |
+| Argon Valve Relay  | Digital   | 23              | General Purpose Output    |
 
 *   **Single-Board Computer (SBC):** Raspberry Pi (recommended) or similar Linux-based SBC capable of running Python and interfacing with GPIO.
 *   **Sensors:**
