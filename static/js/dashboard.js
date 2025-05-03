@@ -286,7 +286,7 @@ function updateSetpoints() {
     console.log("Sending setpoints:", setpoints);
     displayError(''); // Clear previous errors
 
-    fetch('/setpoints', {
+    fetch('/api/setpoints', {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
