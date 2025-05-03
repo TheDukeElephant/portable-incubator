@@ -3,7 +3,7 @@ from app.hal.co2_sensor import CO2Sensor
 
 async def main():
     print("Starting CO2 sensor test...")
-    sensor_port = "/dev/serial0"
+    sensor_port = "/dev/ttyS0"
     try:
         async with CO2Sensor(sensor_port) as sensor:
             co2_ppm = await sensor.read_ppm()
