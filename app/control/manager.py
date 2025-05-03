@@ -121,13 +121,13 @@ class ControlManager:
             sample_time=CONTROL_SAMPLE_TIME,
             enabled_attr="o2_enabled" # Pass the enabled attribute name
         )
-        # self.co2_loop = CO2Loop( # TEMP DISABLED
-        #     manager=self, # Pass manager instance
-        #     co2_sensor_port=CO2_SENSOR_PORT, # Pass the configured sensor port
-        #     vent_relay_pin=CO2_VENT_PIN,
-        #     enabled_attr="co2_enabled", # Pass the enabled attribute name
-        #     setpoint=DEFAULT_CO2_SETPOINT
-        # )
+        self.co2_loop = CO2Loop(
+            manager=self, # Pass manager instance
+            co2_sensor_port=CO2_SENSOR_PORT, # Pass the configured sensor port
+            vent_relay_pin=CO2_VENT_PIN,
+            enabled_attr="co2_enabled", # Pass the enabled attribute name
+            setpoint=DEFAULT_CO2_SETPOINT
+        )
         self.air_pump_loop = AirPumpControlLoop(
             manager=self, # Pass manager instance (required by BaseLoop)
             control_interval=1.0, # Use control_interval instead of interval_sec
