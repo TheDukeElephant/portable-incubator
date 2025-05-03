@@ -531,9 +531,9 @@ class ControlManager:
                 "o2": o2_status.get("o2"),
                 "o2_setpoint": o2_status.get("setpoint"),
                 "argon_valve_on": o2_status.get("argon_valve_on"), # This should reflect both flags via loop's property
-                # "co2_ppm": co2_status.get("co2_ppm"), # TEMP DISABLED
-                # "co2_setpoint_ppm": co2_status.get("setpoint_ppm"), # TEMP DISABLED
-                # "vent_active": co2_status.get("vent_active"), # TEMP DISABLED
+                "co2_ppm": self.co2_loop.current_co2 if hasattr(self, 'co2_loop') else None,
+                "co2_setpoint_ppm": self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None,
+                "vent_active": self.co2_loop.is_vent_active if hasattr(self, 'co2_loop') else None,
                 "air_pump_on": air_pump_status.get("pump_on", False),
                 "air_pump_speed": air_pump_status.get("speed_percent", 0),
             }
