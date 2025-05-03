@@ -38,7 +38,7 @@ The system follows a layered architecture:
 | Component          | Interface | BCM GPIO Pin(s) | Notes                     |
 | :----------------- | :-------- | :-------------- | :------------------------ |
 | O2 Sensor          | I2C       | 2 (SDA), 3 (SCL) | Standard I2C pins         |
-| CO2 Sensor         | UART      | 14 (TXD), 15 (RXD)| Standard UART pins (ttyS0) |
+| CO2 Sensor         | UART      | 14 (TXD), 15 (RXD)| Pi TXD->Sensor RXD, Pi RXD->Sensor TXD |
 | DHT22 Sensor       | Digital   | 4               | General Purpose I/O       |
 | Heater Relay       | Digital   | 17              | General Purpose Output    |
 | Humidifier Relay   | Digital   | 27              | General Purpose Output    |
