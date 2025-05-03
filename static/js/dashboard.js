@@ -267,6 +267,7 @@ function updateSetpoints() {
     if (tempSetpoint !== '') setpoints.temperature = parseFloat(tempSetpoint);
     if (humSetpoint !== '') setpoints.humidity = parseFloat(humSetpoint);
     if (o2Setpoint !== '') setpoints.o2 = parseFloat(o2Setpoint);
+    console.log("[DEBUG] CO2 setpoint input value:", co2Setpoint);
     if (co2Setpoint !== '') {
         // Convert percentage input back to ppm before sending
         const co2SetpointPercentage = parseFloat(co2Setpoint);
