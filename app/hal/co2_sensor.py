@@ -13,7 +13,7 @@ class CO2Reading:
 
 class CO2Sensor:
     def __init__(self, url: str, baudrate: int = 9600,
-                 init_cmd: bytes = b'K 2\r\n', read_cmd: bytes = b'Z 2\r\n', *,
+                 init_cmd: bytes = None, read_cmd: bytes = b'Z\r\n', *,
                  timeout: float = 2.0):
         """
         Initializes the CO2 Sensor communication.
