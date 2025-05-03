@@ -82,11 +82,11 @@ class CO2Sensor:
                     await asyncio.sleep(retry_delay)
                     continue
 
-                logging.getLogger(__name__).debug(f"Sending read command: {self._read_cmd!r}")
+                logging.getLogger(__name__).info(f"[DEBUG] Sending read command: {self._read_cmd!r}")
                 self._writer.write(self._read_cmd)
                 await self._writer.drain()
                 line = await asyncio.wait_for(self._reader.readline(), timeout=1.5)
-                logging.getLogger(__name__).debug(f"Received raw data: {line!r}")
+                logging.getLogger(__name__).info(f"[DEBUG] Received raw data from CO2 sensor: {line!r}")
                 return self._parse_ppm(line)
 
             except asyncio.TimeoutError:
@@ -137,7 +137,7 @@ class CO2Sensor:
             logging.getLogger(__name__).debug(f"Parsed PPM: {ppm}")
             return ppm
         except (ValueError, IndexError, UnicodeDecodeError) as e:
-            logging.getLogger(__name__).warning(f"Bad frame format: {raw!r} ({e})")
+            logging.getLogger(__name__).warning(f"[DEBUG] Bad frame format from CO2 sensor: {raw!r} ({e})")
             raise ValueError(f"Could not parse PPM value from sensor response: {raw!r}") from e
         except Exception as e:
             logging.getLogger(__name__).error(f"Unexpected error parsing PPM: {raw!r} ({e})")
