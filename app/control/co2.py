@@ -166,8 +166,21 @@ class CO2Loop(BaseLoop):
             "control_interval_s": self.control_interval
         }
 
+    async def start(self):
+        """Starts the loop and opens the CO2 sensor connection."""
+        try:
+            await self.sensor.__aenter__()
+        except Exception as e:
+            print(f"Error: Failed to open CO2 sensor connection: {e}")
+            return  # Prevent the loop from starting if sensor connection fails
+        await super().start()
+
     async def stop(self):
-        """Stops the loop and ensures the vent is turned off."""
+        """Stops the loop, closes the CO2 sensor connection, and ensures the vent is turned off."""
+        try:
+            await self.sensor.__aexit__()
+        except Exception as e:
+            print(f"Error: Failed to close CO2 sensor connection: {e}")
         await super().stop()
         if self.vent_relay and self.vent_active:
             print("CO2Loop stopping: Turning vent OFF.")
