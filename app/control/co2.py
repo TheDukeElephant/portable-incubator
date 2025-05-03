@@ -63,7 +63,7 @@ class CO2Loop(BaseLoop):
     def setpoint(self, value: float):
         if value > 0: # Basic validation
             self._setpoint = value
-            print(f"CO2Loop Setpoint updated: < {self._setpoint} ppm")
+            print(f"[DEBUG] CO2Loop Setpoint updated to: {self._setpoint} ppm")
         else:
             print(f"Warning: Invalid CO2 setpoint ignored: {value}")
 
