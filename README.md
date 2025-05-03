@@ -119,13 +119,8 @@ Contributions are welcome! If you'd like to contribute, please follow these step
 
 ## Roadmap
 
-*   [ ] Implement persistent data logging to a file or database.
 *   [ ] Add user authentication and authorization.
-*   [ ] Develop UI controls for adjusting setpoints and manual overrides.
 *   [ ] Implement alarm notifications (email, SMS) for critical deviations.
-*   [ ] Add historical data plotting/charting capabilities.
-*   [ ] Improve error handling and system resilience.
-*   [ ] Develop unit and integration tests.
 *   [ ] Containerize the application using Docker for easier deployment.
 
 ## License
