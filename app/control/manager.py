@@ -16,7 +16,7 @@ from ..hal.relay_output import RelayOutput
 from .temperature import TemperatureLoop
 from .humidity import HumidityLoop
 from .o2 import O2Loop
-# from .co2 import CO2Loop # Import the new control loop # TEMP DISABLED
+from .co2 import CO2Loop # Import the new control loop
 from .air_pump import AirPumpControlLoop # Import the air pump loop
 
 # Data Logger Import
