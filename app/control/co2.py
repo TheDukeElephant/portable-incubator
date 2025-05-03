@@ -23,9 +23,9 @@ class CO2Loop(BaseLoop):
     """
     def __init__(self,
                  manager: 'ControlManager', # Add manager argument
-                 co2_sensor_port: str, # Accept sensor port path
-                 vent_relay_pin: int,
-                 enabled_attr: str, # Accept the enabled attribute name
+                 co2_sensor_port: str = "/dev/serial0", # Accept sensor port path
+                 vent_relay_pin: int = 0,
+                 enabled_attr: str = "", # Accept the enabled attribute name
                  setpoint: float = DEFAULT_CO2_SETPOINT_PPM):
         """
         Initializes the CO2 control loop.
