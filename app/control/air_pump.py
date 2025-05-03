@@ -1,7 +1,7 @@
 import time
 import logging
 from app.control.base_loop import BaseLoop
-from app.hal.motor_driver import L298NMotor
+from app.hal.motor_driver import RelayMotorControl
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,8 @@ class AirPumpControlLoop(BaseLoop):
         super().__init__(manager, control_interval, enabled_attr=enabled_attr)
         # self.name = "AirPumpControl" # Name is usually handled by class name or manager
         try:
-            self.motor = L298NMotor(pin_ena=PIN_ENA, pin_in1=PIN_IN1, pin_in2=PIN_IN2)
-            logger.info(f"AirPumpControlLoop initialized with motor on ENA={PIN_ENA}, IN1={PIN_IN1}, IN2={PIN_IN2}")
+            self.motor = RelayMotorControl(relay_pin=PIN_ENA)
+            logger.info(f"AirPumpControlLoop initialized with relay on GPIO {PIN_ENA}")
         except Exception as e:
             logger.error(f"Failed to initialize L298NMotor for Air Pump: {e}", exc_info=True)
             self.motor = None # Ensure motor is None if init fails
@@ -73,7 +73,7 @@ class AirPumpControlLoop(BaseLoop):
         # State machine for pump control within the cycle
         if self.pump_state == "pending_on":
             try:
-                self.motor.start(PUMP_SPEED_PERCENT)
+                self.motor.run_for_one_second_every_minute()
                 self.pump_state = "on"
                 logger.info(f"Air pump turned ON at {PUMP_SPEED_PERCENT}% speed. Cycle time: {time_since_cycle_start:.2f}s")
             except Exception as e:
@@ -82,7 +82,7 @@ class AirPumpControlLoop(BaseLoop):
 
         elif self.pump_state == "on" and time_since_cycle_start >= PUMP_ON_DURATION_S:
             try:
-                self.motor.stop()
+                self.motor.cleanup()
                 self.pump_state = "off"
                 logger.info(f"Air pump turned OFF. Cycle time: {time_since_cycle_start:.2f}s")
             except Exception as e:
