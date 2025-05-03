@@ -16,6 +16,18 @@ The Portable Incubator project is a sophisticated, Flask-based web application m
 
 ## Architecture Overview
 
+## Gas Control System
+
+### Control Method
+
+The CO2 and O2 levels are managed using simple threshold logic. When the measured level exceeds the setpoint, the corresponding valve is activated. This approach avoids the complexity of PID controllers while ensuring effective control.
+
+### Valve Timing
+
+To address the high system pressure, the following timing constraints are implemented:
+- Valves are activated for only 0.1 seconds per activation cycle.
+- A mandatory cooldown period of 60 seconds is enforced between activations for each gas type. This allows for proper dilution and prevents rapid cycling.
+
 The system follows a layered architecture:
 
 1.  **Hardware Abstraction Layer (HAL - `app/hal/`):** Provides a standardized interface to interact with physical sensors and actuators, decoupling the core logic from specific hardware implementations.

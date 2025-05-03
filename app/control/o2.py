@@ -92,6 +92,8 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
     async def control_step(self):
         """Reads sensor, applies threshold logic, and updates the Argon valve relay state."""
         self._measure() # Read sensor first, updates self.current_value
+        last_activation_time = getattr(self, "_last_activation_time", None)
+        current_time = time.monotonic()
 
         # 1. Check Sensor Status
         if self.current_value == "NC":
@@ -117,10 +119,12 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         should_be_on = current_o2_float > self._setpoint
 
         # 3. Update Relay only if state needs to change
-        if should_be_on and not self._argon_valve_on:
+        if should_be_on and (last_activation_time is None or current_time - last_activation_time >= 60):
+            print(f"Argon Valve ON for 0.1 seconds (O2: {current_o2_float:.2f}% > Setpoint: {self._setpoint:.1f}%)")
             self.argon_valve_relay.on()
-            self._argon_valve_on = True
-            print(f"Argon Valve ON (O2: {current_o2_float:.2f}% > Setpoint: {self._setpoint:.1f}%)")
+            await asyncio.sleep(0.1)
+            self.argon_valve_relay.off()
+            self._last_activation_time = current_time
         elif not should_be_on and self._argon_valve_on:
             self.argon_valve_relay.off()
             self._argon_valve_on = False

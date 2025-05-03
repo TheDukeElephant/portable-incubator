@@ -71,6 +71,8 @@ class CO2Loop(BaseLoop):
         """Performs a single control step for CO2 management."""
         # 1. Read Sensor (using new async method)
         reading_successful = False
+        last_activation_time = getattr(self, "_last_activation_time", None)
+        current_time = time.monotonic()
         try:
             self.current_co2 = await self.sensor.read_ppm()
             # Check if the sensor itself returned an invalid reading indicator (e.g., None or specific error value)
@@ -109,11 +111,12 @@ class CO2Loop(BaseLoop):
         if self.vent_relay:
             # We know self.current_co2 is a valid number here
             if self.current_co2 > self._setpoint:
-                if not self.vent_active:
-                    print(f"CO2 High ({self.current_co2} ppm > {self._setpoint} ppm). Activating vent.")
+                if not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 60):
+                    print(f"CO2 High ({self.current_co2} ppm > {self._setpoint} ppm). Activating vent for 0.1 seconds.")
                     self.vent_relay.on()
-                    self.vent_active = True
-                    self._vent_start_time = time.monotonic()
+                    await asyncio.sleep(0.1)
+                    self.vent_relay.off()
+                    self._last_activation_time = current_time
                 else:
                     # Check if vent has been open too long (prevent continuous venting)
                     if self._vent_start_time and (time.monotonic() - self._vent_start_time > MAX_VENT_DURATION_SECONDS):
