@@ -120,7 +120,9 @@ def status():
 def setpoints():
     """Updates the setpoints for control loops."""
     data = request.json
+    print(f"Received setpoints data: {data}")  # Log received data
     if not data:
+        print("Error: No JSON data received.")
         return jsonify({"ok": False, "error": "No JSON data received"}), 400
 
     valid_setpoints = {}
@@ -130,14 +132,21 @@ def setpoints():
             if key in data:
                 valid_setpoints[key] = float(data[key])
     except (ValueError, TypeError) as e:
-         return jsonify({"ok": False, "error": f"Invalid setpoint value type: {e}"}), 400
+        print(f"Error: Invalid setpoint value type - {e}")
+        return jsonify({"ok": False, "error": f"Invalid setpoint value type: {e}"}), 400
 
     if not valid_setpoints:
-         return jsonify({"ok": False, "error": f"No valid setpoint keys found in request ({allowed_keys})"}), 400
+        print(f"Error: No valid setpoint keys found in request. Allowed keys: {allowed_keys}")
+        return jsonify({"ok": False, "error": f"No valid setpoint keys found in request ({allowed_keys})"}), 400
 
-    # Update the manager (this method is synchronous)
-    manager.update_setpoints(valid_setpoints)
-    return jsonify({"ok": True, "updated_setpoints": valid_setpoints})
+    try:
+        # Update the manager (this method is synchronous)
+        manager.update_setpoints(valid_setpoints)
+        print(f"Setpoints updated successfully: {valid_setpoints}")
+        return jsonify({"ok": True, "updated_setpoints": valid_setpoints})
+    except Exception as e:
+        print(f"Error updating setpoints in manager: {e}")
+        return jsonify({"ok": False, "error": f"Failed to update setpoints: {e}"}), 500
 
 # --- NEW: Endpoints for getting/setting individual control states ---
 ALLOWED_CONTROL_NAMES = {"temperature", "humidity", "o2", "co2"}
