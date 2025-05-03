@@ -155,7 +155,7 @@ class ControlManager:
                 'temp_setpoint': self.temp_loop.setpoint,
                 'humidity_setpoint': self.humidity_loop.setpoint,
                 'o2_setpoint': self.o2_loop.setpoint,
-                # 'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else DEFAULT_CO2_SETPOINT, # TEMP DISABLED
+                'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else DEFAULT_CO2_SETPOINT,
                 'incubator_running': self.incubator_running,
                 'temperature_enabled': self.temperature_enabled,
                 'humidity_enabled': self.humidity_enabled,
@@ -180,7 +180,7 @@ class ControlManager:
             'temp_setpoint': DEFAULT_TEMP_SETPOINT,
             'humidity_setpoint': DEFAULT_HUMIDITY_SETPOINT,
             'o2_setpoint': DEFAULT_O2_SETPOINT,
-            # 'co2_setpoint': DEFAULT_CO2_SETPOINT, # TEMP DISABLED
+            'co2_setpoint': DEFAULT_CO2_SETPOINT,
             'incubator_running': False,
             'temperature_enabled': True,
             'humidity_enabled': True,
@@ -231,7 +231,7 @@ class ControlManager:
             self.temp_loop.setpoint = float(state.get('temp_setpoint', DEFAULT_TEMP_SETPOINT))
             self.humidity_loop.setpoint = float(state.get('humidity_setpoint', DEFAULT_HUMIDITY_SETPOINT))
             self.o2_loop.setpoint = float(state.get('o2_setpoint', DEFAULT_O2_SETPOINT))
-            # self.co2_loop.setpoint = float(state.get('co2_setpoint', DEFAULT_CO2_SETPOINT)) # TEMP DISABLED
+            self.co2_loop.setpoint = float(state.get('co2_setpoint', DEFAULT_CO2_SETPOINT))
         except (ValueError, TypeError) as e:
              self._logger.warning(f"Error applying setpoints from state: {e}. Using defaults.") # Use logger
              self.temp_loop.setpoint = DEFAULT_TEMP_SETPOINT
