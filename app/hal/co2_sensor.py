@@ -35,7 +35,14 @@ class CO2Sensor:
         self._writer: asyncio.StreamWriter | None = None
 
     async def __aenter__(self):  # async context manager
-        self._reader, self._writer = await serial_asyncio.open_serial_connection(**self._port_cfg)
+        self._reader, self._writer = await serial_asyncio.open_serial_connection(
+            url=self._port_cfg['url'],
+            baudrate=self._port_cfg.get('baudrate', 9600),
+            bytesize=8,
+            parity='N',
+            stopbits=1,
+            timeout=self._port_cfg.get('timeout', 2.0)
+        )
         await asyncio.sleep(0.2)
         # Original code had drain/sleep here, but open_serial_connection likely handles readiness.
         # Let's keep it simple unless issues arise.
@@ -61,47 +68,49 @@ class CO2Sensor:
 
 
     async def read_ppm(self) -> int:
-        retries = 3
-        retry_delay = 0.5
+        last_err: Exception | None = None
+        logger = logging.getLogger(__name__) # Get logger instance
 
-        for attempt in range(retries):
+        for attempt in range(3):
             try:
                 if not self._writer or not self._reader:
-                    logging.getLogger(__name__).warning(f"Attempt {attempt + 1}: Sensor connection not established or closed.")
-                    if attempt == retries - 1:
-                        logging.getLogger(__name__).warning("Max retries reached. Attempting to reinitialize sensor connection.")
-                        try:
-                            # Ensure previous connection is closed before reopening
-                            await self.__aexit__() # Close existing streams if any
-                            await self.__aenter__() # Reopen connection using correct config
-                            logging.getLogger(__name__).info("Sensor connection reinitialized successfully.")
-                            # After successful reinitialization, continue to the next loop iteration
-                            # which will attempt the read again.
-                        except Exception as e:
-                            logging.getLogger(__name__).error(f"Sensor reinitialization failed: {e}", exc_info=True) # Log traceback
-                            # If reinitialization fails, return "NC" for this attempt cycle
-                            return "NC"
-                    await asyncio.sleep(retry_delay)
-                    continue
+                    logger.warning(f"Attempt {attempt + 1}: Sensor connection not established or closed. Attempting reinitialization.")
+                    # Try to re-establish connection cleanly
+                    await self.__aexit__() # Ensure closed first
+                    await asyncio.sleep(0.1) # Brief pause
+                    await self.__aenter__() # Re-open
+                    logger.info(f"Attempt {attempt + 1}: Sensor connection reinitialized.")
+                    # Continue to next part of the loop to send read command
 
-                logging.getLogger(__name__).info(f"[DEBUG] Sending read command: {self._read_cmd!r}")
+                # Add a small delay before sending command
                 await asyncio.sleep(0.1)
+                logger.info(f"Attempt {attempt + 1}: Sending read command: {self._read_cmd!r}")
                 self._writer.write(self._read_cmd)
                 await self._writer.drain()
-                line = await asyncio.wait_for(self._reader.readline(), timeout=2.5)
-                logging.getLogger(__name__).info(f"[DEBUG] Received raw data from CO2 sensor: {line!r}")
-                return self._parse_ppm(line)
 
-            except asyncio.TimeoutError:
-                logging.getLogger(__name__).error(f"Attempt {attempt + 1}: Timeout waiting for CO2 sensor response.")
-            except Exception as e:
-                logging.getLogger(__name__).error(f"Attempt {attempt + 1}: Error reading or parsing CO2 sensor data: {e}")
+                # Read until carriage return
+                logger.debug(f"Attempt {attempt + 1}: Waiting for response...")
+                raw = await asyncio.wait_for(self._reader.readuntil(b'\r'), timeout=1.2)
+                logger.info(f"Attempt {attempt + 1}: Received raw data: {raw!r}")
+                return self._parse_ppm(raw)
 
-            if attempt < retries - 1:
-                await asyncio.sleep(retry_delay)
+            except asyncio.TimeoutError as exc:
+                logger.error(f"Attempt {attempt + 1}: Timeout waiting for CO2 sensor response.")
+                last_err = exc
+            except ValueError as exc: # Catch parsing errors specifically
+                 logger.error(f"Attempt {attempt + 1}: Error parsing CO2 sensor data: {exc}")
+                 last_err = exc # Keep the specific parsing error
+            except Exception as exc:
+                logger.error(f"Attempt {attempt + 1}: Unexpected error reading CO2 sensor: {exc}", exc_info=True) # Log full traceback for unexpected errors
+                last_err = exc
 
-        logging.getLogger(__name__).error("Max retries reached. Returning 'NC'.")
-        return "NC"
+            # Wait before retrying
+            if attempt < 2: # Only sleep if not the last attempt
+                 await asyncio.sleep(0.5)
+
+        # If loop finishes without returning, raise an error
+        logger.critical(f"CO2 sensor read failed after 3 retries.")
+        raise RuntimeError(f"CO2 sensor read failed after 3 retries: {last_err}") from last_err
         logging.getLogger(__name__).debug(f"Sending read command: {self._read_cmd!r}")
         self._writer.write(self._read_cmd)
         await self._writer.drain()
@@ -124,27 +133,30 @@ class CO2Sensor:
 
     @staticmethod
     def _parse_ppm(raw: bytes) -> int:
+        """
+        Accepts:  b'Z 00473\\r'     or  b'Z00473\\r'     or 7‑byte binary frame.
+        Returns:  473  (ppm)
+        """
+        # ––– binary frame –––
+        if len(raw) == 7 and raw[0] == 0xFE:
+            high, low = raw[3], raw[4]
+            return (high << 8) | low                           # already ppm
+
+        # ––– ASCII replies –––
+        decoded = raw.decode('ascii', errors='ignore').strip() # 'Z 00473'
+        # drop every non‑digit, keeps us safe whatever spacing SenseAir sends
+        digits = ''.join(ch for ch in decoded if ch.isdigit())
+        if not digits:
+            # Log the problematic raw data before raising
+            logging.getLogger(__name__).warning(f"Could not parse PPM: no digits found in reply: {raw!r}")
+            raise ValueError(f"no digits in reply: {raw!r}")
         try:
-            # Expect "Z 1234\r\n" or similar based on read_cmd
-            decoded = raw.decode('ascii', errors='ignore').strip()
-            parts = decoded.split()
-            if not parts:
-                 raise ValueError("Empty response received")
-            # Assuming the value is the last part
-            value_str = parts[-1]
-            # Check if the prefix matches the expected response format if needed
-            # e.g., if self._read_cmd is b'Z\r\n', expect prefix 'Z'
-            # prefix = parts[0]
-            # assert prefix == 'Z' # Or adapt based on actual command/response
-            ppm = int(value_str)
+            ppm = int(digits)
             logging.getLogger(__name__).debug(f"Parsed PPM: {ppm}")
             return ppm
-        except (ValueError, IndexError, UnicodeDecodeError) as e:
-            logging.getLogger(__name__).warning(f"[DEBUG] Bad frame format from CO2 sensor: {raw!r} ({e})")
-            raise ValueError(f"Could not parse PPM value from sensor response: {raw!r}") from e
-        except Exception as e:
-            logging.getLogger(__name__).error(f"Unexpected error parsing PPM: {raw!r} ({e})")
-            raise
+        except ValueError as e:
+            logging.getLogger(__name__).warning(f"Could not parse PPM: error converting digits '{digits}' to int: {e}. Raw: {raw!r}")
+            raise ValueError(f"Could not convert digits '{digits}' to int from raw: {raw!r}") from e
 
 # Note: The CO2Reading dataclass might be useful elsewhere,
 # but the core functionality is in CO2Sensor.
