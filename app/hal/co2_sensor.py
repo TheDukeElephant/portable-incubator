@@ -36,6 +36,7 @@ class CO2Sensor:
 
     async def __aenter__(self):  # async context manager
         self._reader, self._writer = await serial_asyncio.open_serial_connection(**self._port_cfg)
+        await asyncio.sleep(0.2)
         # Original code had drain/sleep here, but open_serial_connection likely handles readiness.
         # Let's keep it simple unless issues arise.
         # await self._writer.drain()
@@ -44,6 +45,7 @@ class CO2Sensor:
             logging.getLogger(__name__).info(f"Sending init command: {self._init_cmd!r}")
             self._writer.write(self._init_cmd)
             await self._writer.drain()
+            await asyncio.sleep(0.1)
             # Consider adding a small delay or reading response if needed
         return self
 
@@ -83,6 +85,7 @@ class CO2Sensor:
                     continue
 
                 logging.getLogger(__name__).info(f"[DEBUG] Sending read command: {self._read_cmd!r}")
+                await asyncio.sleep(0.1)
                 self._writer.write(self._read_cmd)
                 await self._writer.drain()
                 line = await asyncio.wait_for(self._reader.readline(), timeout=1.5)
