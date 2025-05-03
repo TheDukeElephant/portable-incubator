@@ -333,7 +333,7 @@ class ControlManager:
                 asyncio.create_task(self.temp_loop.run(), name="TempLoop"),
                 asyncio.create_task(self.humidity_loop.run(), name="HumidityLoop"),
                 asyncio.create_task(self.o2_loop.run(), name="O2Loop"),
-                # asyncio.create_task(self.co2_loop.run(), name="CO2Loop"), # TEMP DISABLED
+                asyncio.create_task(self.co2_loop.run(), name="CO2Loop"),
                 asyncio.create_task(self.air_pump_loop.run(), name="AirPumpLoop"),
                 asyncio.create_task(self._logging_task(), name="LoggingTask")
             ]
