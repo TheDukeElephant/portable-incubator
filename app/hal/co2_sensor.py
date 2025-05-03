@@ -14,7 +14,7 @@ class CO2Reading:
 class CO2Sensor:
     def __init__(self, url: str, baudrate: int = 9600,
                  init_cmd: bytes = b'K 2\r\n', read_cmd: bytes = b'Z 2\r\n', *,
-                 timeout: float = 1.0):
+                 timeout: float = 2.0):
         """
         Initializes the CO2 Sensor communication.
 
@@ -88,7 +88,7 @@ class CO2Sensor:
                 await asyncio.sleep(0.1)
                 self._writer.write(self._read_cmd)
                 await self._writer.drain()
-                line = await asyncio.wait_for(self._reader.readline(), timeout=1.5)
+                line = await asyncio.wait_for(self._reader.readline(), timeout=2.5)
                 logging.getLogger(__name__).info(f"[DEBUG] Received raw data from CO2 sensor: {line!r}")
                 return self._parse_ppm(line)
 

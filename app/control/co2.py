@@ -170,6 +170,7 @@ class CO2Loop(BaseLoop):
         """Starts the loop and opens the CO2 sensor connection."""
         try:
             await self.sensor.__aenter__()
+            await asyncio.sleep(0.5)
         except Exception as e:
             print(f"Error: Failed to open CO2 sensor connection: {e}")
             return  # Prevent the loop from starting if sensor connection fails
