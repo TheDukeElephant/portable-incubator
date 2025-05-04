@@ -91,6 +91,10 @@ class CO2Sensor:
             logger.warning(f"Failed to query/parse sensor multiplier: {e}. Using default multiplier 1.")
             self._multiplier = 1 # Default on error
 
+        # --- Override for specific sensor ---
+        logger.info("Overriding sensor multiplier to 10x as per configuration.")
+        self._multiplier = 10
+
         # Set polling mode (Mode 2) to avoid unsolicited data
         try:
             logger.info("Setting sensor to polling mode (K 2).")
