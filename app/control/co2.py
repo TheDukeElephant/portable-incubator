@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 # --- Configuration ---
 DEFAULT_CO2_SETPOINT_PPM = 1000.0 # Target maximum CO2 level in ppm
-CONTROL_INTERVAL_SECONDS = 15     # How often to check CO2 level
+CONTROL_INTERVAL_SECONDS = 3     # How often to check CO2 level
 # VENT_RELAY_PIN = 24            # GPIO pin will now be passed in __init__
 MIN_VENT_DURATION_SECONDS = 5     # Minimum time to keep vent open
 MAX_VENT_DURATION_SECONDS = 60    # Maximum time to keep vent open in one go
