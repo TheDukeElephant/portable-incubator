@@ -220,7 +220,7 @@ function updateUI(data) {
     // Update chart data with the current CO2 percentage to match the Y-axis
     updateChartData('co2', co2_percentage);
     // Update CO2 Enable Switch state
-    if (co2EnableSwitch && data.co2_enabled !== undefined && document.activeElement !== co2EnableSwitch) {
+    if (co2EnableSwitch && data.co2_enabled !== undefined /* && document.activeElement !== co2EnableSwitch */) { // Removed activeElement check
         console.log(`[LOG] updateUI: Setting co2EnableSwitch.checked = ${data.co2_enabled}`);
         co2EnableSwitch.checked = data.co2_enabled;
     }
