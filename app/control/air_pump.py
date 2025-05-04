@@ -12,7 +12,7 @@ AIR_PUMP_RELAY_PIN = 26
 
 # Control parameters for the 1s on, 59s off cycle
 PUMP_ON_DURATION_S = 5
-PUMP_OFF_DURATION_S = 15
+PUMP_OFF_DURATION_S = 10
 PUMP_CYCLE_DURATION_S = PUMP_ON_DURATION_S + PUMP_OFF_DURATION_S
 
 class AirPumpControlLoop(BaseLoop):
