@@ -519,7 +519,7 @@ class ControlManager:
                 "temperature_enabled": self.temperature_enabled,
                 "humidity_enabled": self.humidity_enabled,
                 "o2_enabled": self.o2_enabled,
-                # "co2_enabled": self.co2_enabled, # TEMP DISABLED
+                "co2_enabled": self.co2_enabled,
                 "air_pump_enabled": self.air_pump_enabled, # NEW: Report air pump enabled state
                 # ---------------------------------
                 "temperature": temp_status.get("temperature"),
