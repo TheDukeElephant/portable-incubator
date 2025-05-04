@@ -25,30 +25,20 @@ class RelayMotorControl:
         self.relay_pin = relay_pin
         logger.info(f"RelayMotorControl initialized on GPIO {relay_pin}")
 
-    def run_for_one_second_every_minute(self):
+    async def control_step(self):
         """
-        Turns the motor on for 1 second every minute.
+        Controls the motor relay using the same logic as the CO2 valve relay.
         """
-        import threading
-
-        def motor_task():
-            try:
-                while True:
-                    logger.info(f"Turning motor ON for 1 second on GPIO {self.relay_pin}.")
-                    self.relay.on()
-                    time.sleep(1)
-                    logger.info(f"Turning motor OFF on GPIO {self.relay_pin}.")
-                    self.relay.off()
-                    logger.info("Waiting for 59 seconds.")
-                    time.sleep(59)
-            except KeyboardInterrupt:
-                logger.info("Motor control interrupted by user.")
-            finally:
-                self.cleanup()
-
-        motor_thread = threading.Thread(target=motor_task, daemon=True)
-        motor_thread.start()
-        logger.info("Motor control thread started.")
+        try:
+            logger.info(f"Turning motor ON for 1 second on GPIO {self.relay_pin}.")
+            self.relay.on()
+            await asyncio.sleep(1)
+            logger.info(f"Turning motor OFF on GPIO {self.relay_pin}.")
+            self.relay.off()
+            logger.info("Waiting for 59 seconds.")
+            await asyncio.sleep(59)
+        except Exception as e:
+            logger.error(f"Error in motor control step: {e}")
 
     def cleanup(self):
         """Cleans up GPIO resources by closing the relay."""
