@@ -127,9 +127,11 @@ class CO2Loop(BaseLoop):
         # TODO: Add hysteresis or more advanced control if needed
         if self.vent_relay:
             # We know self.current_co2 is a valid number here
-            if self.current_co2 > self._setpoint:
+            # --- MODIFIED: Invert logic for injection ---
+            if self.current_co2 < self._setpoint: # Check if CO2 is LOW
                 if not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 60):
-                    print(f"CO2 High ({self.current_co2} ppm > {self._setpoint} ppm). Activating vent for 0.1 seconds.")
+                    # --- MODIFIED: Update log message ---
+                    print(f"CO2 Low ({self.current_co2} ppm < {self._setpoint} ppm). Injecting CO2 for 0.1 seconds.")
                     self.vent_relay.on()
                     await asyncio.sleep(0.1) # This needs to be inside async def control_step
                     self.vent_relay.off()
@@ -144,23 +146,37 @@ class CO2Loop(BaseLoop):
                          self.vent_active = False # Mark as inactive so next check re-evaluates
                          self._vent_start_time = None
 
-            elif self.vent_active: # CO2 is below setpoint, and vent is currently active
-                 # Check minimum vent duration
-                 if self._vent_start_time and (time.monotonic() - self._vent_start_time >= MIN_VENT_DURATION_SECONDS):
-                     print(f"CO2 OK ({self.current_co2} ppm <= {self._setpoint} ppm). Deactivating vent.")
-                     self.vent_relay.off()
-                     self.vent_active = False
-                     self._vent_start_time = None
-                 # else: Vent is on, but hasn't met minimum duration yet, keep it on.
+            # --- MODIFIED: Logic when injection was active ---
+            elif self.vent_active: # CO2 is now >= setpoint, and injection relay is currently active (shouldn't happen with 0.1s pulse, but good practice)
+                 # Check minimum vent duration (Now minimum *injection* duration - might not be needed for pulse)
+                 # If we were doing continuous injection, this logic would turn it off when CO2 >= setpoint
+                 # For 0.1s pulse, this 'elif self.vent_active:' block might be unnecessary as vent_active is never True for long.
+                 # Let's keep it simple for now and assume the pulse logic handles it.
+                 # If issues arise with continuous activation, revisit this block.
+                 # Original logic for turning off vent when CO2 <= setpoint is removed as it's inverted.
+                 # We might need logic here if MIN_VENT_DURATION_SECONDS > 0.1s was intended for injection.
+                 # Assuming 0.1s pulse is the goal, this block can be simplified or removed.
+                 # For now, let's comment out the original deactivation logic based on level.
+                 # if self._vent_start_time and (time.monotonic() - self._vent_start_time >= MIN_VENT_DURATION_SECONDS):
+                 #     print(f"CO2 Reached Setpoint ({self.current_co2} ppm >= {self._setpoint} ppm). Deactivating injection.")
+                 #     self.vent_relay.off()
+                 #     self.vent_active = False
+                 #     self._vent_start_time = None
+                 pass # No action needed here for the 0.1s pulse logic when CO2 >= setpoint
+                 # else: Vent is on, but hasn't met minimum duration yet, keep it on. # Removed incorrectly indented lines
 
         else: # Simulation if relay not initialized
              # We know self.current_co2 is a valid number here
-             if self.current_co2 > self._setpoint:
+             # --- MODIFIED: Invert simulation logic ---
+             if self.current_co2 < self._setpoint: # Check if CO2 is LOW
                  if not self.vent_active:
-                     print(f"CO2 High ({self.current_co2} ppm > {self._setpoint} ppm). (Simulating vent ON)")
-                     self.vent_active = True
+                     # --- MODIFIED: Update simulation message ---
+                     print(f"CO2 Low ({self.current_co2} ppm < {self._setpoint} ppm). (Simulating injection ON)")
+                     self.vent_active = True # Simulate turning on (briefly for pulse)
+                     # In simulation, we don't have the sleep/off, so vent_active might stay True until next check
              elif self.vent_active:
-                 print(f"CO2 OK ({self.current_co2} ppm <= {self._setpoint} ppm). (Simulating vent OFF)")
+                 # --- MODIFIED: Update simulation message ---
+                 print(f"CO2 Reached Setpoint ({self.current_co2} ppm >= {self._setpoint} ppm). (Simulating injection OFF)")
                  self.vent_active = False
 
         # print(f"CO2 Loop: Current={self.current_co2} ppm, Setpoint=<{self._setpoint} ppm, Vent Active={self.is_vent_active}") # Debug print
