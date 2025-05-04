@@ -39,7 +39,8 @@ class CO2Loop(BaseLoop):
         """
         super().__init__(manager=manager, control_interval=CONTROL_INTERVAL_SECONDS, enabled_attr=enabled_attr) # Pass manager and enabled_attr
         # Instantiate the sensor here using the provided port
-        self.sensor = CO2Sensor(url=co2_sensor_port)
+        # Use the unfiltered 'z' command to read above 20k ppm
+        self.sensor = CO2Sensor(url=co2_sensor_port, use_unfiltered_cmd=True)
         self._setpoint = setpoint
         self.vent_relay_pin = vent_relay_pin
         self.current_co2 = None # Initialize as None

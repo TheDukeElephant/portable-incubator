@@ -13,7 +13,8 @@ class CO2Reading:
 
 class CO2Sensor:
     def __init__(self, url: str, baudrate: int = 9600,
-                 init_cmd: bytes = None, read_cmd: bytes = b'Z\r\n', *,
+                 init_cmd: bytes = None, read_cmd: bytes = None, *, # Default read_cmd removed
+                 use_unfiltered_cmd: bool = False, # New flag
                  timeout: float = 2.0):
         """
         Initializes the CO2 Sensor communication.
@@ -22,7 +23,10 @@ class CO2Sensor:
             url (str): The serial port device path (e.g., '/dev/ttyS0', '/dev/ttyUSB0'). Required.
             baudrate (int): Serial communication baud rate.
             init_cmd (bytes): Initialization command to send to the sensor (optional).
-            read_cmd (bytes): Command to send to request a reading.
+            read_cmd (bytes): Command to send to request a reading. If None, defaults to
+                b'Z\\r\\n' (filtered) or b'z\\r\\n' (unfiltered) based on use_unfiltered_cmd.
+            use_unfiltered_cmd (bool): If True, use the unfiltered 'z' command (reads above 20k ppm
+                for 20% sensors) instead of the default filtered 'Z' command.
             timeout (float): Read timeout in seconds.
         """
         if not url:
@@ -30,7 +34,11 @@ class CO2Sensor:
         # Store config using 'url' key expected by serial_asyncio
         self._port_cfg = dict(url=url, baudrate=baudrate, timeout=timeout)
         self._init_cmd = init_cmd
-        self._read_cmd = read_cmd
+        # Set read command based on flag if not explicitly provided
+        if read_cmd is None:
+            self._read_cmd = b'z\r\n' if use_unfiltered_cmd else b'Z\r\n'
+        else:
+            self._read_cmd = read_cmd # Use provided command if specified
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._multiplier: int = 1 # Default multiplier
@@ -160,8 +168,8 @@ class CO2Sensor:
     # Make _parse_ppm an instance method to access self._multiplier
     def _parse_ppm(self, raw: bytes) -> int:
         """
-        Accepts:  b' Z 00473\\r\\n' or similar ASCII, or 7-byte binary frame.
-        Returns:  473  (ppm)
+        Accepts:  b' Z 00473\\r\\n', b' z 00473\\r\\n', or similar ASCII, or 7-byte binary frame.
+        Returns:  Scaled PPM value (e.g., 473)
         """
         # ––– binary frame –––
         if len(raw) == 7 and raw[0] == 0xFE:
