@@ -160,7 +160,7 @@ class ControlManager:
                 'temperature_enabled': self.temperature_enabled,
                 'humidity_enabled': self.humidity_enabled,
                 'o2_enabled': self.o2_enabled,
-                # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
+                'co2_enabled': self.co2_enabled,
                 'air_pump_enabled': self.air_pump_enabled,
             }
         
@@ -185,7 +185,7 @@ class ControlManager:
             'temperature_enabled': True,
             'humidity_enabled': True,
             'o2_enabled': True,
-            # 'co2_enabled': True, # TEMP DISABLED
+            'co2_enabled': True,
             'air_pump_enabled': True, # NEW: Add default for air pump
         }
         loaded_state = default_state.copy() # Start with defaults
@@ -246,7 +246,7 @@ class ControlManager:
         self.temperature_enabled = bool(state.get('temperature_enabled', True))
         self.humidity_enabled = bool(state.get('humidity_enabled', True))
         self.o2_enabled = bool(state.get('o2_enabled', True))
-        # self.co2_enabled = bool(state.get('co2_enabled', True)) # TEMP DISABLED
+        self.co2_enabled = bool(state.get('co2_enabled', True))
         self.air_pump_enabled = bool(state.get('air_pump_enabled', True)) # NEW: Apply air pump state
 
 
@@ -256,7 +256,7 @@ class ControlManager:
             self.temperature_enabled = True
             self.humidity_enabled = True
             self.o2_enabled = True
-            # self.co2_enabled = True # TEMP DISABLED
+            self.co2_enabled = True
             self.air_pump_enabled = True # NEW: Reset air pump state
             # Note: This doesn't reset setpoints or incubator_running state, only the enabled flags.
 
@@ -273,7 +273,7 @@ class ControlManager:
                         'temperature_enabled': status.get('temperature_enabled'),
                         'humidity_enabled': status.get('humidity_enabled'),
                         'o2_enabled': status.get('o2_enabled'),
-                        # 'co2_enabled': status.get('co2_enabled'), # TEMP DISABLED
+                        'co2_enabled': status.get('co2_enabled'),
                         'air_pump_enabled': status.get('air_pump_enabled'), # NEW: Log air pump enabled state
                         # ---------------------------------
                         'temperature': status.get('temperature'),
@@ -575,7 +575,7 @@ class ControlManager:
                         'temperature_enabled': self.temperature_enabled,
                         'humidity_enabled': self.humidity_enabled,
                         'o2_enabled': self.o2_enabled,
-                        # 'co2_enabled': self.co2_enabled, # TEMP DISABLED
+                        'co2_enabled': self.co2_enabled,
                         'air_pump_enabled': self.air_pump_enabled, # NEW: Save air pump state
                     }
                     self._save_state(current_state)
@@ -589,8 +589,8 @@ class ControlManager:
                 return self.humidity_enabled
             elif control_name == "o2":
                 return self.o2_enabled
-            # elif control_name == "co2": # TEMP DISABLED
-            #     return self.co2_enabled # TEMP DISABLED
+            elif control_name == "co2":
+                return self.co2_enabled
             elif control_name == "air_pump": # NEW: Get air pump state
                 return self.air_pump_enabled
             else:
@@ -639,10 +639,12 @@ class ControlManager:
                 'temp_setpoint': self.temp_loop.setpoint,
                 'humidity_setpoint': self.humidity_loop.setpoint,
                 'o2_setpoint': self.o2_loop.setpoint,
+                'co2_setpoint': self.co2_loop.setpoint if hasattr(self, 'co2_loop') else None, # Add CO2 setpoint
                 'incubator_running': self.incubator_running,
                 'temperature_enabled': self.temperature_enabled,
                 'humidity_enabled': self.humidity_enabled,
                 'o2_enabled': self.o2_enabled,
+                'co2_enabled': self.co2_enabled, # Add CO2 enabled
                 'air_pump_enabled': self.air_pump_enabled,
             }
             self._save_state(current_state)
