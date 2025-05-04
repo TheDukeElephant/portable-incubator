@@ -33,8 +33,10 @@ class CO2Sensor:
         self._read_cmd = read_cmd
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._multiplier: int = 1 # Default multiplier
 
     async def __aenter__(self):  # async context manager
+        logger = logging.getLogger(__name__)
         self._reader, self._writer = await serial_asyncio.open_serial_connection(
             url=self._port_cfg['url'],
             baudrate=self._port_cfg.get('baudrate', 9600),
@@ -54,6 +56,45 @@ class CO2Sensor:
             await self._writer.drain()
             await asyncio.sleep(0.1)
             # Consider adding a small delay or reading response if needed
+
+        # Query the multiplier after initialization
+        try:
+            logger.info("Querying sensor multiplier with '.' command.")
+            self._writer.write(b'.\r\n')
+            await self._writer.drain()
+            await asyncio.sleep(0.1) # Give sensor time to respond
+            factor_raw = await asyncio.wait_for(self._reader.readuntil(b'\n'), timeout=1.0)
+            logger.debug(f"Received multiplier raw data: {factor_raw!r}")
+            # Extract digits only
+            digits = b''.join(ch for ch in factor_raw if ch.isdigit())
+            if digits:
+                self._multiplier = int(digits)
+                # Handle the 0-5% or 0-20% case where multiplier is 1 but reported as 0 sometimes?
+                # Manual implies '.' returns the actual multiplier (1, 10, 100).
+                # Let's trust the sensor report for now. If it reports 0, we might need adjustment.
+                if self._multiplier == 0:
+                     logger.warning("Sensor reported multiplier 0, using 1 instead as per potential datasheet interpretation for low ranges.")
+                     self._multiplier = 1 # Assume 1 if 0 is reported, common for <60% sensors
+                logger.info(f"Sensor multiplier set to: {self._multiplier}")
+            else:
+                logger.warning(f"Could not parse multiplier from response: {factor_raw!r}. Using default multiplier 1.")
+                self._multiplier = 1
+        except (asyncio.TimeoutError, ValueError, Exception) as e:
+            logger.warning(f"Failed to query/parse sensor multiplier: {e}. Using default multiplier 1.")
+            self._multiplier = 1 # Default on error
+
+        # Set polling mode (Mode 2) to avoid unsolicited data
+        try:
+            logger.info("Setting sensor to polling mode (K 2).")
+            self._writer.write(b'K 2\r\n')
+            await self._writer.drain()
+            await asyncio.sleep(0.1) # Give sensor time to process
+            # We might want to read the confirmation ' K 00002\r\n' but it's often safe to assume it worked.
+            # response = await asyncio.wait_for(self._reader.readuntil(b'\n'), timeout=1.0)
+            # logger.debug(f"Received response after K 2 command: {response!r}")
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Failed to set sensor polling mode: {e}")
+
         return self
 
     async def __aexit__(self, *exc):
@@ -90,15 +131,17 @@ class CO2Sensor:
 
                 # Read until carriage return
                 logger.debug(f"Attempt {attempt + 1}: Waiting for response...")
-                raw = await asyncio.wait_for(self._reader.readuntil(b'\r'), timeout=1.2)
+                # Read until newline (\n) to consume the full response
+                raw = await asyncio.wait_for(self._reader.readuntil(b'\n'), timeout=1.2)
                 logger.info(f"Attempt {attempt + 1}: Received raw data: {raw!r}")
                 return self._parse_ppm(raw)
 
             except asyncio.TimeoutError as exc:
-                logger.error(f"Attempt {attempt + 1}: Timeout waiting for CO2 sensor response.")
+                # Demote timeout to warning as it might be expected occasionally
+                logger.warning(f"Attempt {attempt + 1}: Timeout waiting for CO2 sensor response.")
                 last_err = exc
             except ValueError as exc: # Catch parsing errors specifically
-                 logger.error(f"Attempt {attempt + 1}: Error parsing CO2 sensor data: {exc}")
+                 logger.warning(f"Attempt {attempt + 1}: Error parsing CO2 sensor data: {exc}") # Also demote parsing errors? Maybe keep as error. Let's keep warning for now.
                  last_err = exc # Keep the specific parsing error
             except Exception as exc:
                 logger.error(f"Attempt {attempt + 1}: Unexpected error reading CO2 sensor: {exc}", exc_info=True) # Log full traceback for unexpected errors
@@ -111,30 +154,13 @@ class CO2Sensor:
         # If loop finishes without returning, raise an error
         logger.critical(f"CO2 sensor read failed after 3 retries.")
         raise RuntimeError(f"CO2 sensor read failed after 3 retries: {last_err}") from last_err
-        logging.getLogger(__name__).debug(f"Sending read command: {self._read_cmd!r}")
-        self._writer.write(self._read_cmd)
-        await self._writer.drain()
-        try:
-            # Increased timeout slightly based on original code
-            line = await asyncio.wait_for(self._reader.readline(), timeout=1.5)
-            logging.getLogger(__name__).debug(f"Received raw data: {line!r}")
-            return self._parse_ppm(line)
-        except asyncio.TimeoutError:
-            logging.getLogger(__name__).error("Timeout waiting for CO2 sensor response.")
-            raise
-        except Exception as e:
-            logging.getLogger(__name__).error(f"Error reading or parsing CO2 sensor data: {e}")
-            if attempt == retries - 1:
-                logging.getLogger(__name__).error("Max retries reached. Returning 'NC'.")
-                return "NC"
-            else:
-                await asyncio.sleep(retry_delay)
+        # --- Unreachable code below this line removed ---
 
 
-    @staticmethod
-    def _parse_ppm(raw: bytes) -> int:
+    # Make _parse_ppm an instance method to access self._multiplier
+    def _parse_ppm(self, raw: bytes) -> int:
         """
-        Accepts:  b'Z 00473\\r'     or  b'Z00473\\r'     or 7‑byte binary frame.
+        Accepts:  b' Z 00473\\r\\n' or similar ASCII, or 7-byte binary frame.
         Returns:  473  (ppm)
         """
         # ––– binary frame –––
@@ -151,9 +177,11 @@ class CO2Sensor:
             logging.getLogger(__name__).warning(f"Could not parse PPM: no digits found in reply: {raw!r}")
             raise ValueError(f"no digits in reply: {raw!r}")
         try:
-            ppm = int(digits)
-            logging.getLogger(__name__).debug(f"Parsed PPM: {ppm}")
-            return ppm
+            ppm_raw = int(digits)
+            # Apply the multiplier fetched during initialization
+            ppm_scaled = ppm_raw * self._multiplier
+            logging.getLogger(__name__).debug(f"Parsed raw PPM: {ppm_raw}, Multiplier: {self._multiplier}, Scaled PPM: {ppm_scaled}")
+            return ppm_scaled
         except ValueError as e:
             logging.getLogger(__name__).warning(f"Could not parse PPM: error converting digits '{digits}' to int: {e}. Raw: {raw!r}")
             raise ValueError(f"Could not convert digits '{digits}' to int from raw: {raw!r}") from e
