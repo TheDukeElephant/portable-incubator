@@ -27,21 +27,28 @@ class RelayMotorControl:
 
     def run_for_one_second_every_minute(self):
         """
-        Turns the motor on for 1 second every minute.
+        Turns the motor on for 1 second every minute in a separate thread.
         """
-        try:
-            while True:
-                logger.info("Turning motor ON for 1 second.")
-                self.relay.on()
-                time.sleep(1)
-                logger.info("Turning motor OFF.")
-                self.relay.off()
-                logger.info("Waiting for 59 seconds.")
-                time.sleep(59)
-        except KeyboardInterrupt:
-            logger.info("Motor control interrupted by user.")
-        finally:
-            self.cleanup()
+        import threading
+
+        def motor_task():
+            try:
+                while True:
+                    logger.info("Turning motor ON for 1 second.")
+                    self.relay.on()
+                    time.sleep(1)
+                    logger.info("Turning motor OFF.")
+                    self.relay.off()
+                    logger.info("Waiting for 59 seconds.")
+                    time.sleep(59)
+            except KeyboardInterrupt:
+                logger.info("Motor control interrupted by user.")
+            finally:
+                self.cleanup()
+
+        motor_thread = threading.Thread(target=motor_task, daemon=True)
+        motor_thread.start()
+        logger.info("Motor control thread started.")
 
     def cleanup(self):
         """Cleans up GPIO resources by closing the relay."""
