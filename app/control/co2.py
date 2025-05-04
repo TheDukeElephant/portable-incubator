@@ -105,6 +105,22 @@ class CO2Loop(BaseLoop):
 
         # --- Control logic proceeds only if BaseLoop determined the loop is active ---
 
+# --- Debug Logging ---
+        print(f"[CO2 DEBUG] Loop Active: {self.is_active}")
+        print(f"[CO2 DEBUG] Reading Successful: {reading_successful}")
+        if reading_successful:
+            print(f"[CO2 DEBUG] Current CO2: {self.current_co2} ppm")
+            print(f"[CO2 DEBUG] Setpoint: {self._setpoint} ppm")
+            print(f"[CO2 DEBUG] Vent Relay Available: {self.vent_relay is not None}")
+            if self.vent_relay:
+                print(f"[CO2 DEBUG] Vent Active (State): {self.vent_active}")
+                print(f"[CO2 DEBUG] Last Activation: {last_activation_time}")
+                print(f"[CO2 DEBUG] Current Time: {current_time}")
+                if last_activation_time:
+                    print(f"[CO2 DEBUG] Time Since Last: {current_time - last_activation_time:.2f}s")
+                print(f"[CO2 DEBUG] Condition Check (current > setpoint): {self.current_co2 > self._setpoint}")
+                print(f"[CO2 DEBUG] Condition Check (not active and time >= 60): {not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 60)}")
+        # ---------------------
         # 2. Control Logic (Simple Threshold)
         # This part is only reached if reading_successful is True and the loop is active
         # TODO: Add hysteresis or more advanced control if needed
