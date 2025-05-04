@@ -12,10 +12,9 @@ logger = logging.getLogger(__name__)
 
 class RelayMotorControl:
     """
-    Controls a motor connected via an L298N motor driver using gpiozero.
-    Assumes one direction control for a pump (using forward motion).
+    Controls a motor using a relay connected to a GPIO pin.
     """
-    def __init__(self, relay_pin):
+    def __init__(self, relay_pin=26):
         """
         Initializes the motor control using a relay.
 
@@ -23,21 +22,22 @@ class RelayMotorControl:
             relay_pin (int): GPIO pin number the relay is connected to.
         """
         self.relay = RelayOutput(relay_pin)
+        self.relay_pin = relay_pin
         logger.info(f"RelayMotorControl initialized on GPIO {relay_pin}")
 
     def run_for_one_second_every_minute(self):
         """
-        Turns the motor on for 1 second every minute in a separate thread.
+        Turns the motor on for 1 second every minute.
         """
         import threading
 
         def motor_task():
             try:
                 while True:
-                    logger.info("Turning motor ON for 1 second.")
+                    logger.info(f"Turning motor ON for 1 second on GPIO {self.relay_pin}.")
                     self.relay.on()
                     time.sleep(1)
-                    logger.info("Turning motor OFF.")
+                    logger.info(f"Turning motor OFF on GPIO {self.relay_pin}.")
                     self.relay.off()
                     logger.info("Waiting for 59 seconds.")
                     time.sleep(59)
