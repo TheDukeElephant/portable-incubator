@@ -105,8 +105,8 @@ class CO2Loop(BaseLoop):
 
         # --- Control logic proceeds only if BaseLoop determined the loop is active ---
 
-# --- Debug Logging ---
-        print(f"[CO2 DEBUG] Loop Active: {self.is_active}")
+        # --- Debug Logging ---
+        print(f"[CO2 DEBUG] Loop Active: {self._active()}") # Corrected: Use _active() method
         print(f"[CO2 DEBUG] Reading Successful: {reading_successful}")
         if reading_successful:
             print(f"[CO2 DEBUG] Current CO2: {self.current_co2} ppm")
@@ -121,6 +121,7 @@ class CO2Loop(BaseLoop):
                 print(f"[CO2 DEBUG] Condition Check (current > setpoint): {self.current_co2 > self._setpoint}")
                 print(f"[CO2 DEBUG] Condition Check (not active and time >= 60): {not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 60)}")
         # ---------------------
+
         # 2. Control Logic (Simple Threshold)
         # This part is only reached if reading_successful is True and the loop is active
         # TODO: Add hysteresis or more advanced control if needed
@@ -130,7 +131,7 @@ class CO2Loop(BaseLoop):
                 if not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 60):
                     print(f"CO2 High ({self.current_co2} ppm > {self._setpoint} ppm). Activating vent for 0.1 seconds.")
                     self.vent_relay.on()
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.1) # This needs to be inside async def control_step
                     self.vent_relay.off()
                     self._last_activation_time = current_time
                 else:
