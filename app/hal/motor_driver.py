@@ -52,7 +52,7 @@ class RelayMotorControl:
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     # Use the specified pins
-    RELAY_PIN = 17
+    RELAY_PIN = 26
 
     motor_instance = None # Define outside try block
     try:
