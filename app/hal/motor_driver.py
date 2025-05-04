@@ -1,6 +1,5 @@
 from app.hal.relay_output import RelayOutput
-import time
-import asyncio
+import time # Keep time for potential use in calling code, though not used here directly
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,58 +25,19 @@ class RelayMotorControl:
         self.relay_pin = relay_pin
         logger.info(f"RelayMotorControl initialized on GPIO {relay_pin}")
 
-    def run_for_one_second_every_minute(self):
-        """
-        Restores the original method for compatibility with existing code.
-        """
-        import threading
+    def on(self):
+        """Turns the motor ON by activating the relay."""
+        logger.info(f"Turning motor ON via relay on GPIO {self.relay_pin}.")
+        self.relay.on()
 
-        def motor_task():
-            try:
-                while True:
-                    logger.info(f"Turning motor ON for 1 second on GPIO {self.relay_pin}.")
-                    self.relay.on()
-                    time.sleep(1)
-                    logger.info(f"Turning motor OFF on GPIO {self.relay_pin}.")
-                    self.relay.off()
-                    logger.info("Waiting for 59 seconds.")
-                    time.sleep(59)
-            except KeyboardInterrupt:
-                logger.info("Motor control interrupted by user.")
-            finally:
-                self.cleanup()
-
-        motor_thread = threading.Thread(target=motor_task, daemon=True)
-        motor_thread.start()
-        logger.info("Motor control thread started.")
+    def off(self):
+        """Turns the motor OFF by deactivating the relay."""
+        logger.info(f"Turning motor OFF via relay on GPIO {self.relay_pin}.")
+        self.relay.off()
 
     def cleanup(self):
         """Cleans up GPIO resources by closing the relay."""
         self.relay.close()
         logger.info("RelayMotorControl resources released.")
 
-# Example usage (for testing purposes)
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    # Use the specified pins
-    RELAY_PIN = 26
-
-    motor_instance = None # Define outside try block
-    try:
-        print("Initializing motor...")
-        motor_instance = RelayMotorControl(relay_pin=RELAY_PIN)
-
-        print("Running motor for 1 second every minute...")
-        motor_instance.run_for_one_second_every_minute()
-
-    except KeyboardInterrupt:
-        print("\nInterrupted by user")
-    except Exception as e:
-        print(f"\nAn error occurred: {e}")
-    finally:
-        if motor_instance:
-            print("Cleaning up GPIO...")
-            motor_instance.cleanup()
-            print("GPIO cleaned up.")
-        else:
-            print("Motor not initialized, no cleanup needed.")
+# Example usage removed as it relied on the old method.

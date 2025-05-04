@@ -5,23 +5,20 @@ from app.hal.motor_driver import RelayMotorControl
 
 logger = logging.getLogger(__name__)
 
-# Define GPIO pins (ensure these are correct for your setup)
-# Using the pins specified in the task description
-# Assigning new pins to avoid conflicts with Heater (17) and Humidifier (27)
-PIN_ENA = 12 # Was 17
-PIN_IN1 = 13 # Was 27
-PIN_IN2 = 19 # Was 22 (Changed for consistency, though 22 was likely free)
+# Define GPIO pin for the air pump relay
+# Using the pin previously defined as ENA, assuming this is the relay pin now.
+# If the pump relay is on GPIO 26, change this value.
+AIR_PUMP_RELAY_PIN = 26
 
-# Control parameters
-PUMP_ON_DURATION_S = 5
-PUMP_OFF_DURATION_S = 55
+# Control parameters for the 1s on, 59s off cycle
+PUMP_ON_DURATION_S = 1
+PUMP_OFF_DURATION_S = 59
 PUMP_CYCLE_DURATION_S = PUMP_ON_DURATION_S + PUMP_OFF_DURATION_S
-PUMP_SPEED_PERCENT = 70
 
 class AirPumpControlLoop(BaseLoop):
     """
-    Control loop for managing the air pump connected via L298N driver.
-    Runs the pump for a set duration at a specific interval.
+    Control loop for managing the air pump connected via a simple relay.
+    Runs the pump for 1 second every 60 seconds.
     Implements the control_step required by BaseLoop.
     """
     def __init__(self, manager: 'ControlManager', control_interval: float, enabled_attr: str):
@@ -41,15 +38,14 @@ class AirPumpControlLoop(BaseLoop):
         super().__init__(manager, control_interval, enabled_attr=enabled_attr)
         # self.name = "AirPumpControl" # Name is usually handled by class name or manager
         try:
-            self.motor = RelayMotorControl(relay_pin=PIN_ENA)
-            logger.info(f"AirPumpControlLoop initialized with relay on GPIO {PIN_ENA}")
+            self.motor = RelayMotorControl(relay_pin=AIR_PUMP_RELAY_PIN)
+            logger.info(f"AirPumpControlLoop initialized with relay on GPIO {AIR_PUMP_RELAY_PIN}")
         except Exception as e:
-            logger.error(f"Failed to initialize L298NMotor for Air Pump: {e}", exc_info=True)
+            logger.error(f"Failed to initialize RelayMotorControl for Air Pump on pin {AIR_PUMP_RELAY_PIN}: {e}", exc_info=True)
             self.motor = None # Ensure motor is None if init fails
-            # Consider how to handle this failure - maybe raise an exception or set a failed state
 
-        self.last_cycle_start_time = time.monotonic()
-        self.pump_state = "off" # Initial state
+        self.last_cycle_start_time = time.monotonic() # Time the current cycle (on or off phase) started
+        self.pump_is_on = False # Track if the pump relay is currently active
 
     async def control_step(self):
         """
@@ -63,103 +59,89 @@ class AirPumpControlLoop(BaseLoop):
         current_time = time.monotonic()
         time_since_cycle_start = current_time - self.last_cycle_start_time
 
-        # Check if a new cycle should start
-        if time_since_cycle_start >= PUMP_CYCLE_DURATION_S:
-            self.last_cycle_start_time = current_time
-            time_since_cycle_start = 0 # Reset timer for the new cycle
-            self.pump_state = "pending_on" # Mark to turn on at the start of the cycle
-            logger.debug(f"Air pump cycle reset. Time: {current_time:.2f}")
-
-        # State machine for pump control within the cycle
-        if self.pump_state == "pending_on":
-            try:
-                self.motor.run_for_one_second_every_minute()
-                self.pump_state = "on"
-                logger.info(f"Air pump turned ON at {PUMP_SPEED_PERCENT}% speed. Cycle time: {time_since_cycle_start:.2f}s")
-            except Exception as e:
-                 logger.error(f"Failed to start air pump: {e}", exc_info=True)
-                 self.pump_state = "error" # Enter error state
-
-        elif self.pump_state == "on" and time_since_cycle_start >= PUMP_ON_DURATION_S:
-            try:
-                self.motor.cleanup()
-                self.pump_state = "off"
-                logger.info(f"Air pump turned OFF. Cycle time: {time_since_cycle_start:.2f}s")
-            except Exception as e:
-                 logger.error(f"Failed to stop air pump: {e}", exc_info=True)
-                 self.pump_state = "error" # Enter error state
-
-        elif self.pump_state == "off":
-            # Pump remains off until the next cycle starts
-            pass
-
-        elif self.pump_state == "error":
-            # Stay in error state, maybe attempt recovery or log periodically
-            # logger.error("Air pump control is in an error state.")
-            pass # Avoid flooding logs, error logged when entering state
-
-        # Optional: Log current state periodically for debugging
-        # logger.debug(f"AirPump Step: State={self.pump_state}, CycleTime={time_since_cycle_start:.2f}")
+        # Simple timed cycle logic: 1s ON, 59s OFF
+        if self.pump_is_on:
+            # Pump is currently ON, check if it's time to turn OFF
+            if time_since_cycle_start >= PUMP_ON_DURATION_S:
+                try:
+                    self.motor.off()
+                    self.pump_is_on = False
+                    self.last_cycle_start_time = current_time # Start the OFF phase timer
+                    logger.info(f"Air pump turned OFF. Off phase started.")
+                except Exception as e:
+                    logger.error(f"Failed to turn off air pump: {e}", exc_info=True)
+                    # Consider an error state if needed
+        else:
+            # Pump is currently OFF, check if it's time to turn ON
+            if time_since_cycle_start >= PUMP_OFF_DURATION_S:
+                try:
+                    self.motor.on()
+                    self.pump_is_on = True
+                    self.last_cycle_start_time = current_time # Start the ON phase timer
+                    logger.info(f"Air pump turned ON for {PUMP_ON_DURATION_S}s.")
+                except Exception as e:
+                    logger.error(f"Failed to turn on air pump: {e}", exc_info=True)
+                    # Consider an error state if needed
 
     def _ensure_actuator_off(self):
-        """Ensures the air pump motor is stopped."""
-        if self.motor and self.pump_state != "off" and self.pump_state != "error":
+        """Ensures the air pump relay is turned off."""
+        if self.motor and self.pump_is_on:
             try:
-                logger.info("Air pump loop inactive: Stopping motor.")
-                self.motor.stop()
-                self.pump_state = "off" # Reset state when forced off
+                logger.info("Air pump loop inactive: Turning relay OFF.")
+                self.motor.off()
+                self.pump_is_on = False
                 self.last_cycle_start_time = time.monotonic() # Reset cycle timer
             except Exception as e:
-                logger.error(f"Failed to stop air pump during ensure_off: {e}", exc_info=True)
-                self.pump_state = "error"
+                logger.error(f"Failed to turn off air pump relay during ensure_off: {e}", exc_info=True)
+                # Consider error state
 
     def reset_control(self):
-        """Resets the pump state, ensuring it's off."""
-        logger.info("AirPumpControlLoop: Resetting control state (forcing pump OFF).")
+        """Resets the pump state, ensuring the relay is off."""
+        logger.info("AirPumpControlLoop: Resetting control state (forcing relay OFF).")
         if self.motor:
             try:
-                self.motor.stop()
+                self.motor.off()
             except Exception as e:
-                 logger.error(f"Failed to stop air pump during reset_control: {e}", exc_info=True)
-                 self.pump_state = "error"
-                 return # Exit if stop failed
+                 logger.error(f"Failed to turn off air pump relay during reset_control: {e}", exc_info=True)
+                 # Consider error state
 
-        self.pump_state = "off"
+        self.pump_is_on = False
         self.last_cycle_start_time = time.monotonic() # Reset cycle timer
 
-    @property
-    def is_pump_on(self) -> bool:
-        """Returns True if the pump motor is currently commanded ON."""
-        # The BaseLoop ensures this is only True when the loop is active and commanded ON.
-        return self.pump_state == "on"
+    # Removed old property definition
 
     def get_status(self):
         """Returns the current status of the air pump."""
         if not self.motor:
             return {
                 "pump_on": False,
-                "speed_percent": 0,
-                "state": "error - motor not initialized"
+                "state": "error - motor not initialized",
+                "cycle_elapsed_time": 0.0
             }
 
-        # Use the new property
-        is_on = self.is_pump_on
-        current_speed = self.motor.current_speed if is_on else 0
+        current_time = time.monotonic()
+        elapsed_in_phase = current_time - self.last_cycle_start_time
+        remaining_in_phase = 0.0
+        if self.pump_is_on:
+            remaining_in_phase = max(0, PUMP_ON_DURATION_S - elapsed_in_phase)
+        else:
+            remaining_in_phase = max(0, PUMP_OFF_DURATION_S - elapsed_in_phase)
+
 
         return {
-            "pump_on": is_on, # Use property result
-            "speed_percent": current_speed,
-            "state": self.pump_state,
-            "cycle_elapsed_time": time.monotonic() - self.last_cycle_start_time
+            "pump_on": self.pump_is_on,
+            "state": "on" if self.pump_is_on else "off",
+            "cycle_elapsed_time": elapsed_in_phase,
+            "cycle_remaining_time": remaining_in_phase
         }
 
     def cleanup(self):
         """Cleans up resources used by the control loop."""
         if self.motor:
             try:
-                self.motor.stop() # Ensure motor is stopped
-                self.motor.cleanup()
-                logger.info("AirPumpControlLoop cleanup complete.")
+                self.motor.off() # Ensure motor is off
+                # self.motor.cleanup() # cleanup is called by RelayOutput.__del__ or explicitly elsewhere if needed
+                logger.info("AirPumpControlLoop cleanup: Motor turned off.")
             except Exception as e:
                 logger.error(f"Error during AirPumpControlLoop cleanup: {e}", exc_info=True)
         else:
