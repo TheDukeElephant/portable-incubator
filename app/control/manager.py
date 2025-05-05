@@ -267,6 +267,11 @@ class ControlManager:
                 try:
                     # Log data regardless of incubator_running state, but log the state itself
                     status = self.get_status() # Get full status including enabled states
+
+                    # Round temperature before creating the log dictionary
+                    raw_temp = status.get('temperature')
+                    logged_temp = round(raw_temp, 2) if isinstance(raw_temp, (int, float)) else raw_temp
+
                     log_data = {
                         'incubator_running': status.get('incubator_running'),
                         # --- NEW: Log Enabled States ---
@@ -276,14 +281,14 @@ class ControlManager:
                         'co2_enabled': status.get('co2_enabled'),
                         'air_pump_enabled': status.get('air_pump_enabled'), # NEW: Log air pump enabled state
                         # ---------------------------------
-                        'temperature': status.get('temperature'),
+                        'temperature': logged_temp, # Use the rounded value
                         'humidity': status.get('humidity'),
                         'o2': status.get('o2'),
-                        'co2': status.get('co2_ppm'), # Re-enabled CO2 logging, key adjusted below
+                        'co2': status.get('co2_ppm'), # Key will be adjusted below
                         'temp_setpoint': status.get('temp_setpoint'),
                         'humidity_setpoint': status.get('humidity_setpoint'),
                         'o2_setpoint': status.get('o2_setpoint'),
-                        'co2_setpoint': status.get('co2_setpoint_ppm'), # Re-enabled CO2 setpoint logging, key adjusted below
+                        'co2_setpoint': status.get('co2_setpoint_ppm'), # Key will be adjusted below
                         # Log actuator states as reported by loops (which consider incubator_running AND enabled flags)
                         'heater_on': status.get('heater_on'),
                         'humidifier_on': status.get('humidifier_on'),
@@ -295,7 +300,6 @@ class ControlManager:
                     # Adjust keys to match DataLogger expectations
                     log_data['co2'] = status.get('co2_ppm') # Use 'co2' key
                     log_data['co2_setpoint'] = status.get('co2_setpoint_ppm') # Use 'co2_setpoint' key
-                    print(f"DEBUG: Logging data: {log_data}") # Added debug print
                     await self.logger.log_data(log_data)
                     # print("Logged data point.") # Debugging
 
