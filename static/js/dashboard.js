@@ -190,7 +190,15 @@ function updateUI(data) {
     }
 
     // Oxygen
-    document.getElementById('o2-current').textContent = data.o2 !== null ? data.o2.toFixed(2) : 'NC';
+    // Handle O2 display for numbers or "NC" string
+    const o2Value = data.o2;
+    let o2Display = '--'; // Default fallback
+    if (o2Value === "NC") {
+        o2Display = "NC";
+    } else if (typeof o2Value === 'number') {
+        o2Display = o2Value.toFixed(2);
+    }
+    document.getElementById('o2-current').textContent = o2Display;
     document.getElementById('o2-setpoint-display').textContent = data.o2_setpoint !== null ? data.o2_setpoint.toFixed(1) : '--';
     updateRelayStatus('argon-status', data.argon_valve_on, 'Argon Valve');
      const o2Input = document.getElementById('o2-setpoint-input');
