@@ -279,11 +279,11 @@ class ControlManager:
                         'temperature': status.get('temperature'),
                         'humidity': status.get('humidity'),
                         'o2': status.get('o2'),
-                        # 'co2': status.get('co2_ppm'), # TEMP DISABLED
+                        'co2': status.get('co2_ppm'), # Re-enabled CO2 logging, key adjusted below
                         'temp_setpoint': status.get('temp_setpoint'),
                         'humidity_setpoint': status.get('humidity_setpoint'),
                         'o2_setpoint': status.get('o2_setpoint'),
-                        # 'co2_setpoint': status.get('co2_setpoint_ppm'), # TEMP DISABLED
+                        'co2_setpoint': status.get('co2_setpoint_ppm'), # Re-enabled CO2 setpoint logging, key adjusted below
                         # Log actuator states as reported by loops (which consider incubator_running AND enabled flags)
                         'heater_on': status.get('heater_on'),
                         'humidifier_on': status.get('humidifier_on'),
@@ -292,6 +292,10 @@ class ControlManager:
                         'air_pump_on': status.get('air_pump_on'),
                         'air_pump_speed': status.get('air_pump_speed'),
                     }
+                    # Adjust keys to match DataLogger expectations
+                    log_data['co2'] = status.get('co2_ppm') # Use 'co2' key
+                    log_data['co2_setpoint'] = status.get('co2_setpoint_ppm') # Use 'co2_setpoint' key
+                    print(f"DEBUG: Logging data: {log_data}") # Added debug print
                     await self.logger.log_data(log_data)
                     # print("Logged data point.") # Debugging
 
