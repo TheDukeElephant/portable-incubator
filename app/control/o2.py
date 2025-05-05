@@ -187,7 +187,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
     def get_status(self) -> dict:
         """Returns the current status of the O2 loop."""
         return {
-            "current_value": self.current_value, # Use the new attribute name
+            "o2": self.current_value, # Changed key to 'o2' to match manager/logger expectation
             "setpoint": self.setpoint,
             "argon_valve_on": self.argon_valve_is_on, # Use property which checks incubator_running
             "control_interval_s": self.control_interval
