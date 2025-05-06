@@ -85,7 +85,7 @@ class ControlManager:
         print("  Initializing HAL components...")
         self.dht_sensor = DHT22Sensor(DHT_PIN)
         self.dht_sensor.start_background_initialization()
-        self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # Assuming bus 1, adjust if needed
+        # self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # O2Loop will instantiate its own sensor
         # Use the CO2_SENSOR_PORT constant defined above
         # self.co2_sensor = CO2Sensor(url=CO2_SENSOR_PORT) # TEMP DISABLED
 
@@ -119,6 +119,8 @@ class ControlManager:
             argon_valve_relay=self.argon_valve_relay,
             setpoint=DEFAULT_O2_SETPOINT,
             sample_time=CONTROL_SAMPLE_TIME,
+            i2c_bus=1, # Explicitly pass bus number
+            i2c_address=O2_SENSOR_ADDR, # Pass the correct address 0x73
             enabled_attr="o2_enabled" # Pass the enabled attribute name
         )
         self.co2_loop = CO2Loop(
@@ -390,7 +392,7 @@ class ControlManager:
         if hasattr(self, 'humidifier_relay'): self.humidifier_relay.close()
         if hasattr(self, 'argon_valve_relay'): self.argon_valve_relay.close()
         # if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: self.co2_loop.vent_relay.close() # TEMP DISABLED
-        if hasattr(self, 'o2_sensor'): self.o2_sensor.close()
+        # if hasattr(self, 'o2_sensor'): self.o2_sensor.close() # O2Loop handles its sensor lifecycle
         # DHT sensor and dummy CO2 sensor don't have close methods
 
         # Close logger connection if it was initialized
@@ -444,7 +446,7 @@ class ControlManager:
             self.argon_valve_relay.close()
             # if hasattr(self, 'co2_loop') and self.co2_loop.vent_relay: # TEMP DISABLED
             #      self.co2_loop.vent_relay.close() # TEMP DISABLED
-            self.o2_sensor.close()
+            # self.o2_sensor.close() # O2Loop handles its sensor lifecycle
             # DHT sensor and dummy CO2 sensor don't have close methods
 
             # Close logger connection
