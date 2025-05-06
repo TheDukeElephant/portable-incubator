@@ -35,7 +35,8 @@ class DFRobot_Oxygen(object):
   __count    = 0
   __txbuf      = [0]
   __oxygendata = [0]*101
-  def __init__(self, bus, logger_parent=None): # Added logger_parent
+  # Changed 'bus' parameter to 'i2cbus_obj' to reflect it's an SMBus object
+  def __init__(self, i2cbus_obj: smbus.SMBus, logger_parent=None):
     # Setup logger
     if logger_parent:
         self.logger = logger_parent.getChild("DFRobot_Oxygen_HAL")
@@ -48,13 +49,14 @@ class DFRobot_Oxygen(object):
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO) # Default level
 
-    try:
-        self.logger.debug(f"Initializing SMBus on bus {bus}")
-        self.i2cbus = smbus.SMBus(bus)
-        self.logger.debug(f"SMBus on bus {bus} initialized successfully.")
-    except Exception as e:
-        self.logger.error(f"Failed to initialize SMBus on bus {bus}: {e}", exc_info=True)
-        raise IOError(f"SMBus initialization failed on bus {bus}")
+    # Assign the pre-initialized SMBus object
+    self.i2cbus = i2cbus_obj
+    if self.i2cbus:
+        self.logger.debug(f"SMBus object received and assigned.")
+    else:
+        # This case should ideally be prevented by the caller, but good to log.
+        self.logger.error(f"No SMBus object provided to DFRobot_Oxygen constructor.")
+        raise ValueError("SMBus object cannot be None")
 
   def get_flash(self):
     # NOTE: Added error handling
@@ -187,28 +189,30 @@ class DFRobot_Oxygen(object):
 class DFRobot_Oxygen_IIC(DFRobot_Oxygen):
   def __init__(self, bus, addr, logger_parent=None): # Added logger_parent
     self.__addr = addr
-    # Initialize the base class, passing the logger_parent
-    super(DFRobot_Oxygen_IIC, self).__init__(bus, logger_parent=logger_parent)
+    # Initialize the base class, passing the i2cbus_obj (formerly bus) and logger_parent
+    super(DFRobot_Oxygen_IIC, self).__init__(i2cbus_obj=bus, logger_parent=logger_parent) # 'bus' here is the i2cbus_obj from O2Loop
     # Logger is now self.logger from the base class
-    self.logger.info(f"DFRobot_Oxygen_IIC attempting initialization on bus {bus}, address {hex(addr)}")
+    # The bus number for logging can be retrieved from the i2cbus object if needed, e.g., bus.fd or similar,
+    # but smbus2 doesn't directly expose the bus number easily after init.
+    # We'll log the address primarily.
+    self.logger.info(f"DFRobot_Oxygen_IIC attempting initialization with provided SMBus object, address {hex(addr)}")
 
-    # NOTE: smbus initialization is now in the base class __init__
-    # The try-except for smbus init is in the base class.
-    # If super().__init__ fails, it will raise an exception.
+    # NOTE: smbus initialization is now handled by the caller (O2Loop)
+    # The try-except for smbus init is handled by the caller.
 
     # Optional: Perform an initial read to confirm connection?
     try:
         # self.read_reg(GET_KEY_REGISTER, 1) # Example check, get_flash will do this
         if self.get_flash(): # This also logs
-             self.logger.info(f"Oxygen sensor I2C communication confirmed on bus {bus}, address {hex(addr)}.")
+             self.logger.info(f"Oxygen sensor I2C communication confirmed for address {hex(addr)}.")
         else:
-             self.logger.warning(f"Oxygen sensor I2C communication problem on bus {bus}, address {hex(addr)} during init check (get_flash failed).")
+             self.logger.warning(f"Oxygen sensor I2C communication problem for address {hex(addr)} during init check (get_flash failed).")
              # Depending on desired behavior, could raise an error here
              # raise IOError(f"Failed to confirm sensor communication via get_flash for address {hex(addr)}")
     except Exception as e:
-        self.logger.error(f"Failed during initial sensor check for DFRobot_Oxygen_IIC on bus {bus}, addr {hex(addr)}: {e}", exc_info=True)
+        self.logger.error(f"Failed during initial sensor check for DFRobot_Oxygen_IIC, addr {hex(addr)}: {e}", exc_info=True)
         # Handle initialization failure, maybe raise an error or set a flag
-        raise IOError(f"Failed to initialize/check oxygen sensor on bus {bus}, address {hex(addr)}")
+        raise IOError(f"Failed to initialize/check oxygen sensor for address {hex(addr)}")
 
 
   def write_reg(self, reg, data):
