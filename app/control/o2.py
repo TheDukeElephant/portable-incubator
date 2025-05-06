@@ -45,7 +45,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         # Call BaseLoop constructor, passing the manager, interval, and enabled_attr
         super().__init__(manager=manager, control_interval=sample_time, enabled_attr=enabled_attr)
 
-        self.logger = manager.logger.getChild("O2Loop") # Get a child logger
+        self.logger = manager._logger.getChild("O2Loop") # Get a child logger, changed manager.logger to manager._logger
         self.logger.info("Initializing O2Loop...")
 
         self.argon_valve_relay = argon_valve_relay
