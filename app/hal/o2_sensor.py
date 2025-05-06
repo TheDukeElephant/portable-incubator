@@ -10,8 +10,9 @@
   @url https://github.com/DFRobot/DFRobot_Oxygen
 '''
 import time
-import smbus
+import smbus2 as smbus # Changed to smbus2 for consistency
 import os
+import logging
 
 ## I2C address select
 ADDRESS_0                 = 0x70
@@ -34,26 +35,49 @@ class DFRobot_Oxygen(object):
   __count    = 0
   __txbuf      = [0]
   __oxygendata = [0]*101
-  def __init__(self, bus):
+  def __init__(self, bus, logger_parent=None): # Added logger_parent
+    # Setup logger
+    if logger_parent:
+        self.logger = logger_parent.getChild("DFRobot_Oxygen_HAL")
+    else:
+        self.logger = logging.getLogger("DFRobot_Oxygen_HAL")
+        if not self.logger.handlers: # Add a default handler if none exist
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO) # Default level
+
     try:
+        self.logger.debug(f"Initializing SMBus on bus {bus}")
         self.i2cbus = smbus.SMBus(bus)
+        self.logger.debug(f"SMBus on bus {bus} initialized successfully.")
     except Exception as e:
-        print(f"Failed to initialize SMBus on bus {bus}: {e}")
+        self.logger.error(f"Failed to initialize SMBus on bus {bus}: {e}", exc_info=True)
         raise IOError(f"SMBus initialization failed on bus {bus}")
 
   def get_flash(self):
     # NOTE: Added error handling
     try:
-        rslt = self.read_reg(GET_KEY_REGISTER, 1)
-        if rslt == 0: # Assuming 0 means default or error, check sensor datasheet if possible
+        self.logger.debug(f"Reading key register (GET_KEY_REGISTER: {hex(GET_KEY_REGISTER)})")
+        rslt = self.read_reg(GET_KEY_REGISTER, 1) # pylint: disable=no-member
+        if not rslt or rslt[0] == 0: # Check if rslt is None or empty, or value is 0
+          self.logger.warning("Key register read 0 or empty. Using default key.")
           self.__key = (20.9 / 120.0) # Default value based on original code comment context
         else:
           self.__key = (float(rslt[0]) / 1000.0)
+          self.logger.info(f"Key register read successfully. Key set to: {self.__key} (raw: {rslt[0]})")
         time.sleep(0.1)
         return True # Indicate success
-    except IOError:
-        print("Error reading key register. Sensor connected?")
+    except IOError as e:
+        self.logger.error(f"IOError reading key register. Sensor connected? Error: {e}", exc_info=True)
         self.__key = (20.9 / 120.0) # Use default on error
+        self.logger.warning("Using default key due to read error.")
+        return False # Indicate failure
+    except Exception as e: # Catch other potential errors
+        self.logger.error(f"Unexpected error reading key register: {e}", exc_info=True)
+        self.__key = (20.9 / 120.0) # Use default on error
+        self.logger.warning("Using default key due to unexpected error.")
         return False # Indicate failure
 
   def calibrate(self, vol, mv):
@@ -65,16 +89,23 @@ class DFRobot_Oxygen(object):
     '''
     # NOTE: Added error handling
     try:
+        self.logger.info(f"Calibrating sensor with vol: {vol}, mv: {mv}")
         self.__txbuf[0] = int(vol * 10)
         if (mv < 0.000001) and (mv > (-0.000001)):
-          self.write_reg(USER_SET_REGISTER, self.__txbuf)
+          self.logger.debug(f"Writing to USER_SET_REGISTER ({hex(USER_SET_REGISTER)}) with value: {self.__txbuf}")
+          self.write_reg(USER_SET_REGISTER, self.__txbuf) # pylint: disable=no-member
         else:
           self.__txbuf[0] = int((vol / mv) * 1000)
-          self.write_reg(AUTUAL_SET_REGISTER, self.__txbuf)
+          self.logger.debug(f"Writing to AUTUAL_SET_REGISTER ({hex(AUTUAL_SET_REGISTER)}) with value: {self.__txbuf}")
+          self.write_reg(AUTUAL_SET_REGISTER, self.__txbuf) # pylint: disable=no-member
+        self.logger.info("Calibration write successful.")
         return True # Indicate success
-    except IOError:
-        print("Error writing calibration register. Sensor connected?")
+    except IOError as e:
+        self.logger.error(f"IOError writing calibration register. Sensor connected? Error: {e}", exc_info=True)
         return False # Indicate failure
+    except Exception as e: # Catch other potential errors
+        self.logger.error(f"Unexpected error during calibration: {e}", exc_info=True)
+        return False
 
 
   def get_oxygen_data(self, collect_num):
@@ -90,41 +121,55 @@ class DFRobot_Oxygen(object):
     retry_delay = 0.5
 
     for attempt in range(retries):
+        self.logger.debug(f"get_oxygen_data attempt {attempt + 1}/{retries}")
         if not self.get_flash():  # Try to read key, handles initial communication check
+            self.logger.warning(f"get_flash failed during get_oxygen_data attempt {attempt + 1}.")
             if attempt == retries - 1:
-                print("Max retries reached. Attempting to reinitialize sensor.")
-                try:
-                    self.__init__(self.i2cbus.fd if hasattr(self.i2cbus, 'fd') else bus, self.__addr)
-                    print("Sensor reinitialized successfully.")
-                except Exception as e:
-                    print(f"Sensor reinitialization failed: {e}")
-                    return "NC"
+                self.logger.error("Max retries reached for get_flash. Sensor communication unstable.")
+                # Removed problematic re-initialization block
+                return "NC"
             else:
                 time.sleep(retry_delay)
                 continue
+        # If get_flash was successful, break the retry loop for get_flash
+        break
+    else: # This else belongs to the for loop, executed if loop finished without break
+        self.logger.error("All attempts to get_flash failed in get_oxygen_data.")
+        return "NC"
 
+    # Proceed with reading oxygen data only if get_flash was successful
     if 0 < collect_num <= 100:
-      try:
-        for num in range(collect_num, 1, -1):
-          self.__oxygendata[num-1] = self.__oxygendata[num-2]
-        # Read sensor data
-        rslt = self.read_reg(OXYGEN_DATA_REGISTER, 3)
-        # Calculate oxygen level
-        current_reading = self.__key * (float(rslt[0]) + float(rslt[1]) / 10.0 + float(rslt[2]) / 100.0)
-        self.__oxygendata[0] = current_reading
+        try:
+            self.logger.debug(f"Collecting {collect_num} samples for oxygen data.")
+            for num in range(collect_num, 1, -1):
+                self.__oxygendata[num-1] = self.__oxygendata[num-2]
+            # Read sensor data
+            self.logger.debug(f"Reading OXYGEN_DATA_REGISTER ({hex(OXYGEN_DATA_REGISTER)})")
+            rslt = self.read_reg(OXYGEN_DATA_REGISTER, 3) # pylint: disable=no-member
+            if not rslt or len(rslt) < 3:
+                self.logger.error(f"Failed to read sufficient data from OXYGEN_DATA_REGISTER. Got: {rslt}")
+                return "NC"
 
-        if self.__count < collect_num:
-          self.__count += 1
-        # Return the smoothed average
-        return self.get_average_num(self.__oxygendata, self.__count)
-      except IOError:
-          print("Error reading oxygen data register. Sensor connected?")
-          # Reset smoothing buffer if read fails? Optional.
-          # self.__count = 0
-          # self.__oxygendata = [0]*101
-          return "NC" # Return "NC" on communication error
+            # Calculate oxygen level
+            raw_value = (float(rslt[0]) + float(rslt[1]) / 10.0 + float(rslt[2]) / 100.0)
+            current_reading = self.__key * raw_value
+            self.logger.debug(f"Raw sensor values: {rslt}, calculated raw_value: {raw_value}, key: {self.__key}, current_reading: {current_reading}")
+            self.__oxygendata[0] = current_reading
+
+            if self.__count < collect_num:
+                self.__count += 1
+            # Return the smoothed average
+            avg_o2 = self.get_average_num(self.__oxygendata, self.__count)
+            self.logger.debug(f"Smoothed O2: {avg_o2} from {self.__count} samples.")
+            return avg_o2
+        except IOError as e:
+            self.logger.error(f"IOError reading oxygen data register. Sensor connected? Error: {e}", exc_info=True)
+            return "NC" # Return "NC" on communication error
+        except Exception as e: # Catch other potential errors
+            self.logger.error(f"Unexpected error reading oxygen data: {e}", exc_info=True)
+            return "NC"
     else: # Invalid collect_num
-        print("Error: collect_num must be between 1 and 100.")
+        self.logger.error(f"Invalid collect_num: {collect_num}. Must be between 1 and 100.")
         return "NC" # Or raise an error, returning "NC" for simplicity here
 
   def get_average_num(self, barry, Len):
@@ -140,37 +185,56 @@ class DFRobot_Oxygen(object):
     return (temp / float(Len))
 
 class DFRobot_Oxygen_IIC(DFRobot_Oxygen):
-  def __init__(self, bus, addr):
+  def __init__(self, bus, addr, logger_parent=None): # Added logger_parent
     self.__addr = addr
-    # NOTE: Initialize smbus within a try-except block
+    # Initialize the base class, passing the logger_parent
+    super(DFRobot_Oxygen_IIC, self).__init__(bus, logger_parent=logger_parent)
+    # Logger is now self.logger from the base class
+    self.logger.info(f"DFRobot_Oxygen_IIC attempting initialization on bus {bus}, address {hex(addr)}")
+
+    # NOTE: smbus initialization is now in the base class __init__
+    # The try-except for smbus init is in the base class.
+    # If super().__init__ fails, it will raise an exception.
+
+    # Optional: Perform an initial read to confirm connection?
     try:
-        super(DFRobot_Oxygen_IIC, self).__init__(bus)
-        # Optional: Perform an initial read to confirm connection?
-        # self.read_reg(GET_KEY_REGISTER, 1) # Example check
-        print(f"Oxygen sensor initialized on bus {bus}, address {hex(addr)}")
+        # self.read_reg(GET_KEY_REGISTER, 1) # Example check, get_flash will do this
+        if self.get_flash(): # This also logs
+             self.logger.info(f"Oxygen sensor I2C communication confirmed on bus {bus}, address {hex(addr)}.")
+        else:
+             self.logger.warning(f"Oxygen sensor I2C communication problem on bus {bus}, address {hex(addr)} during init check (get_flash failed).")
+             # Depending on desired behavior, could raise an error here
+             # raise IOError(f"Failed to confirm sensor communication via get_flash for address {hex(addr)}")
     except Exception as e:
-        print(f"Failed to initialize I2C bus {bus}: {e}")
+        self.logger.error(f"Failed during initial sensor check for DFRobot_Oxygen_IIC on bus {bus}, addr {hex(addr)}: {e}", exc_info=True)
         # Handle initialization failure, maybe raise an error or set a flag
-        raise IOError(f"Failed to initialize oxygen sensor on bus {bus}, address {hex(addr)}")
+        raise IOError(f"Failed to initialize/check oxygen sensor on bus {bus}, address {hex(addr)}")
 
 
   def write_reg(self, reg, data):
     # NOTE: Error handling added
     try:
+        self.logger.debug(f"I2C write to addr {hex(self.__addr)}, reg {hex(reg)}, data: {data}")
         self.i2cbus.write_i2c_block_data(self.__addr, reg, data)
     except IOError as e:
-        print(f"I2C write error to reg {hex(reg)} at addr {hex(self.__addr)}: {e}")
-        # os.system('i2cdetect -y 1') # Avoid calling os.system if possible
+        self.logger.error(f"I2C write error to reg {hex(reg)} at addr {hex(self.__addr)}: {e}", exc_info=True)
         time.sleep(0.5) # Short delay before potential retry or returning error
         raise # Re-raise the exception to be caught by calling function
+    except Exception as e: # Catch other potential errors
+        self.logger.error(f"Unexpected error during I2C write to reg {hex(reg)} at addr {hex(self.__addr)}: {e}", exc_info=True)
+        raise
 
   def read_reg(self, reg, length):
     # NOTE: Error handling added, removed infinite loop and os.system call
     try:
+        self.logger.debug(f"I2C read from addr {hex(self.__addr)}, reg {hex(reg)}, length: {length}")
         rslt = self.i2cbus.read_i2c_block_data(self.__addr, reg, length)
+        self.logger.debug(f"I2C read result: {rslt}")
         return rslt
     except IOError as e:
-        print(f"I2C read error from reg {hex(reg)} at addr {hex(self.__addr)}: {e}")
-        # os.system('i2cdetect -y 1') # Avoid calling os.system if possible
+        self.logger.error(f"I2C read error from reg {hex(reg)} at addr {hex(self.__addr)}: {e}", exc_info=True)
         time.sleep(0.5) # Short delay
         raise # Re-raise the exception to be caught by calling function
+    except Exception as e: # Catch other potential errors
+        self.logger.error(f"Unexpected error during I2C read from reg {hex(reg)} at addr {hex(self.__addr)}: {e}", exc_info=True)
+        raise

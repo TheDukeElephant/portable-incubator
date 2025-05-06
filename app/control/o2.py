@@ -1,6 +1,7 @@
 import asyncio
 import time
 import smbus2 # Added for I2C
+import logging # Added for logging
 from ..hal.o2_sensor import DFRobot_Oxygen_IIC, ADDRESS_0 # Import new HAL class and address
 from ..hal.relay_output import RelayOutput
 from .base_loop import BaseLoop # Import BaseLoop
@@ -44,6 +45,9 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         # Call BaseLoop constructor, passing the manager, interval, and enabled_attr
         super().__init__(manager=manager, control_interval=sample_time, enabled_attr=enabled_attr)
 
+        self.logger = manager.logger.getChild("O2Loop") # Get a child logger
+        self.logger.info("Initializing O2Loop...")
+
         self.argon_valve_relay = argon_valve_relay
         self._setpoint = setpoint
         # self._sample_time = sample_time # Handled by BaseLoop
@@ -58,19 +62,24 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         try:
             # Use smbus2 for I2C communication
             bus = smbus2.SMBus(i2c_bus)
-            self.sensor = DFRobot_Oxygen_IIC(bus, i2c_address)
+            self.logger.info(f"Attempting to initialize DFRobot_Oxygen_IIC on bus {i2c_bus}, address {hex(i2c_address)}")
+            self.sensor = DFRobot_Oxygen_IIC(bus, i2c_address, logger_parent=self.logger) # Pass logger
             # Optional: Perform an initial calibration or check if needed here
             # self.sensor.calibrate(...)
-            print(f"DFRobot I2C O2 Sensor initialized on bus {i2c_bus}, address {hex(i2c_address)}.")
+            self.logger.info(f"DFRobot I2C O2 Sensor initialized successfully.")
             # Perform an initial measurement to populate current_value
             self._measure()
-            print(f"O2Loop initialized. Initial O2: {self.current_value}%, Setpoint: > {self._setpoint}% triggers Argon")
+            self.logger.info(f"O2Loop initialized. Initial O2: {self.current_value}%, Setpoint: > {self._setpoint}% triggers Argon")
 
         except (IOError, FileNotFoundError) as e:
-            print(f"Error initializing DFRobot I2C O2 Sensor on bus {i2c_bus}, address {hex(i2c_address)}: {e}")
-            print("O2 control loop will run, but O2 readings will be 'NC'.")
+            self.logger.error(f"Error initializing DFRobot I2C O2 Sensor on bus {i2c_bus}, address {hex(i2c_address)}: {e}", exc_info=True)
+            self.logger.warning("O2 control loop will run, but O2 readings will be 'NC'.")
             self.sensor = None
             self.current_value = "NC" # Ensure state reflects the error
+        except Exception as e: # Catch any other unexpected errors during init
+            self.logger.error(f"Unexpected error initializing O2 sensor: {e}", exc_info=True)
+            self.sensor = None
+            self.current_value = "NC"
 
         # No initial _read_sensor() call needed here anymore
 
@@ -79,14 +88,17 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         if self.sensor:
             try:
                 # Get smoothed data using the HAL method
+                self.logger.debug("Attempting to read O2 sensor data.")
                 o2_level = self.sensor.get_oxygen_data(collect_num=10)
                 self.current_value = o2_level # Store float or "NC" string
+                self.logger.debug(f"O2 sensor read: {self.current_value}")
             except Exception as e:
                 # Catch potential errors during read, though HAL should handle IOErrors
-                print(f"Error reading O2 sensor: {e}")
+                self.logger.error(f"Error reading O2 sensor: {e}", exc_info=True)
                 self.current_value = "NC"
         else:
             # Sensor failed to initialize
+            self.logger.warning("O2 sensor not initialized. Cannot read value.")
             self.current_value = "NC"
 
     async def control_step(self):
@@ -97,7 +109,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
 
         # 1. Check Sensor Status
         if self.current_value == "NC":
-            print("Safety: Turning Argon valve OFF due to O2 sensor reading 'NC'.")
+            self.logger.warning("O2 sensor reading 'NC'. Ensuring Argon valve is OFF for safety.")
             self._ensure_actuator_off() # Ensure valve is off
             return
 
@@ -106,7 +118,7 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
             current_o2_float = float(self.current_value)
         except ValueError:
             # Should not happen if HAL returns float or "NC", but good safeguard
-            print(f"Error: Could not convert O2 value '{self.current_value}' to float. Turning Argon OFF.")
+            self.logger.error(f"Could not convert O2 value '{self.current_value}' to float. Turning Argon OFF.", exc_info=True)
             self._ensure_actuator_off() # Ensure valve is off
             return
 
@@ -120,21 +132,24 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
 
         # 3. Update Relay only if state needs to change
         if should_be_on and (last_activation_time is None or current_time - last_activation_time >= 60):
-            print(f"Argon Valve ON for 0.1 seconds (O2: {current_o2_float:.2f}% > Setpoint: {self._setpoint:.1f}%)")
+            self.logger.info(f"Turning Argon Valve ON for 0.1s (O2: {current_o2_float:.2f}% > Setpoint: {self._setpoint:.1f}%)")
             self.argon_valve_relay.on()
+            self._argon_valve_on = True # Set state immediately
             await asyncio.sleep(0.1)
             self.argon_valve_relay.off()
+            # self._argon_valve_on = False # State is OFF after sleep, but it *was* on
             self._last_activation_time = current_time
         elif not should_be_on and self._argon_valve_on:
+            self.logger.info(f"Turning Argon Valve OFF (O2: {current_o2_float:.2f}% <= Setpoint: {self._setpoint:.1f}%)")
             self.argon_valve_relay.off()
             self._argon_valve_on = False
-            print(f"Argon Valve OFF (O2: {current_o2_float:.2f}% <= Setpoint: {self._setpoint:.1f}%)")
         # else: No change needed
+        self.logger.debug(f"O2 control step. Current: {current_o2_float:.2f}%, Setpoint: {self._setpoint}%, Argon Valve Should Be: {should_be_on}, Is: {self._argon_valve_on}")
 
     def _ensure_actuator_off(self):
         """Turns the argon valve relay off."""
-        if self.argon_valve_relay and self._argon_valve_on:
-            print("O2 loop inactive: Turning Argon valve OFF.")
+        if self.argon_valve_relay and self._argon_valve_on: # Check if it *was* on
+            self.logger.info("O2 loop inactive or error: Ensuring Argon valve is OFF.")
             self.argon_valve_relay.off()
             self._argon_valve_on = False
 
@@ -146,8 +161,8 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
         # Call BaseLoop's stop first
         await super().stop()
         # Ensure Argon valve is off as a final step
-        if self.argon_valve_relay and self._argon_valve_on:
-             print("O2Loop stopping: Turning Argon valve OFF.")
+        if self.argon_valve_relay and self._argon_valve_on: # Check if it *was* on
+             self.logger.info("O2Loop stopping: Ensuring Argon valve is OFF.")
              self.argon_valve_relay.off()
              self._argon_valve_on = False
         # No need to print "stopped" here, BaseLoop does it.
@@ -166,11 +181,11 @@ class O2Loop(BaseLoop): # Inherit from BaseLoop
             # Add reasonable bounds check if necessary (e.g., 0-100)
             if 0 <= new_setpoint <= 100:
                 self._setpoint = new_setpoint
-                print(f"O2 setpoint (threshold) updated to: {self._setpoint}%. Argon ON if O2 > {self._setpoint}%.")
+                self.logger.info(f"O2 setpoint (threshold) updated to: {self._setpoint}%. Argon ON if O2 > {self._setpoint}%.")
             else:
-                 print(f"Error: Invalid O2 setpoint value: {new_setpoint}. Must be between 0 and 100.")
+                 self.logger.error(f"Invalid O2 setpoint value: {new_setpoint}. Must be between 0 and 100.")
         except ValueError:
-            print(f"Error: Invalid O2 setpoint value: {new_setpoint}")
+            self.logger.error(f"Invalid O2 setpoint value: {new_setpoint}", exc_info=True)
 
     @property
     def current_o2(self) -> float | str: # Return type updated
