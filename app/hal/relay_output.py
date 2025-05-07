@@ -91,6 +91,8 @@ if __name__ == '__main__':
     # Replace with actual GPIO pins used for testing
     HEATER_PIN = 17
     HUMIDIFIER_PIN = 27
+    # SECOND_CO2_RELAY_PIN placeholder removed as it's no longer needed for import
+    # and the example usage below doesn't use it.
 
     print("Testing RelayOutput...")
     try:

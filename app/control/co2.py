@@ -3,6 +3,7 @@ import time
 from .base_loop import BaseLoop # Corrected import
 from ..hal.co2_sensor import CO2Sensor
 from ..hal.relay_output import RelayOutput
+
 # Forward declaration for type hinting
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -50,11 +51,22 @@ class CO2Loop(BaseLoop):
         # Initialize the vent relay using the provided pin
         try:
             self.vent_relay = RelayOutput(self.vent_relay_pin, initial_value=False) # Start with vent OFF
-            print(f"CO2Loop initialized. Vent Relay on GPIO {self.vent_relay_pin}. Setpoint: < {self._setpoint} ppm")
+            print(f"CO2Loop initialized. Vent Relay (Primary CO2) on GPIO {self.vent_relay_pin}. Setpoint: < {self._setpoint} ppm")
         except Exception as e:
             # Handle cases where GPIO might not be available (e.g., testing off-Pi)
-            print(f"Warning: Could not initialize vent relay on GPIO {self.vent_relay_pin}: {e}. CO2 control will be simulated.")
+            print(f"Warning: Could not initialize vent relay (Primary CO2) on GPIO {self.vent_relay_pin}: {e}. Primary CO2 control will be simulated.")
             self.vent_relay = None # Indicate relay is not available
+
+        # Initialize the second CO2 relay
+        self.second_co2_relay = None
+        try:
+            # For now, using the placeholder. Ensure this is a valid integer if not a placeholder.
+            pin_value = 12 # Directly use GPIO 12 for the second CO2 relay
+            self.second_co2_relay = RelayOutput(pin_value, initial_value=False) # Start with second solenoid OFF
+            print(f"CO2Loop: Second CO2 Relay initialized on GPIO {pin_value}.")
+        except Exception as e: # Catch any exception during RelayOutput initialization
+            print(f"Warning: Could not initialize second CO2 relay on GPIO {pin_value}: {e}. Second CO2 control will be simulated.")
+            self.second_co2_relay = None
 
     @property
     def setpoint(self) -> float:
@@ -132,11 +144,23 @@ class CO2Loop(BaseLoop):
             if self.current_co2 < self._setpoint: # Check if CO2 is LOW
                 if not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 60):
                     # --- MODIFIED: Update log message ---
-                    print(f"CO2 Low ({self.current_co2} ppm < {self._setpoint} ppm). Injecting CO2 for 0.1 seconds.")
+                    print(f"CO2 Low ({self.current_co2} ppm < {self._setpoint} ppm). Injecting CO2 (Primary Solenoid) for 0.1 seconds.")
                     self.vent_relay.on()
-                    await asyncio.sleep(0.1) # This needs to be inside async def control_step
+                    await asyncio.sleep(0.1) # Primary solenoid injection duration
                     self.vent_relay.off()
-                    self._last_activation_time = current_time
+                    print(f"Primary CO2 injection finished. Waiting 1 second before secondary injection.")
+                    await asyncio.sleep(1.0) # Wait 1 second
+
+                    if self.second_co2_relay:
+                        print(f"Injecting CO2 (Secondary Solenoid) for 0.1 seconds.")
+                        self.second_co2_relay.on()
+                        await asyncio.sleep(0.1) # Secondary solenoid injection duration
+                        self.second_co2_relay.off()
+                        print(f"Secondary CO2 injection finished.")
+                    else:
+                        print(f"Simulating: Secondary CO2 injection for 0.1 seconds (relay not available).")
+
+                    self._last_activation_time = current_time # Mark activation time after both (or primary if secondary fails)
                 else:
                     # Check if vent has been open too long (prevent continuous venting)
                     if self._vent_start_time and (time.monotonic() - self._vent_start_time > MAX_VENT_DURATION_SECONDS):
@@ -172,24 +196,31 @@ class CO2Loop(BaseLoop):
              if self.current_co2 < self._setpoint: # Check if CO2 is LOW
                  if not self.vent_active:
                      # --- MODIFIED: Update simulation message ---
-                     print(f"CO2 Low ({self.current_co2} ppm < {self._setpoint} ppm). (Simulating injection ON)")
+                     print(f"CO2 Low ({self.current_co2} ppm < {self._setpoint} ppm). (Simulating Primary Solenoid injection ON)")
                      self.vent_active = True # Simulate turning on (briefly for pulse)
                      # In simulation, we don't have the sleep/off, so vent_active might stay True until next check
-             elif self.vent_active:
+                     # Simulate secondary solenoid action after a delay
+                     print(f"(Simulating: Wait 1s then Secondary Solenoid injection for 0.1s)")
+ 
+             elif self.vent_active: # This 'vent_active' refers to the primary solenoid's conceptual state
                  # --- MODIFIED: Update simulation message ---
-                 print(f"CO2 Reached Setpoint ({self.current_co2} ppm >= {self._setpoint} ppm). (Simulating injection OFF)")
+                 print(f"CO2 Reached Setpoint ({self.current_co2} ppm >= {self._setpoint} ppm). (Simulating Primary Solenoid injection OFF)")
                  self.vent_active = False
-
-        # print(f"CO2 Loop: Current={self.current_co2} ppm, Setpoint=<{self._setpoint} ppm, Vent Active={self.is_vent_active}") # Debug print
-
+                 # No direct simulation for secondary solenoid turning off as it's a pulse
+ 
+         # print(f"CO2 Loop: Current={self.current_co2} ppm, Setpoint=<{self._setpoint} ppm, Vent Active={self.is_vent_active}") # Debug print
+ 
     def _ensure_actuator_off(self):
-        """Turns the vent relay off and resets vent state."""
-        if self.vent_relay and self.vent_active:
-            print("CO2 loop inactive: Turning vent OFF.")
-            self.vent_relay.off()
-        self.vent_active = False
-        self._vent_start_time = None
-
+         """Turns all CO2 relays off and resets vent state."""
+         if self.vent_relay and self.vent_active: # vent_active refers to primary
+             print("CO2 loop inactive: Turning Primary CO2 vent OFF.")
+             self.vent_relay.off()
+         if self.second_co2_relay and self.second_co2_relay.value: # Check actual state for secondary
+             print("CO2 loop inactive: Turning Secondary CO2 vent OFF.")
+             self.second_co2_relay.off()
+         self.vent_active = False
+         self._vent_start_time = None
+ 
     def get_status(self) -> dict:
         """Returns the current status of the CO2 loop."""
         return {
@@ -217,17 +248,22 @@ class CO2Loop(BaseLoop):
         except Exception as e:
             print(f"Error: Failed to close CO2 sensor connection: {e}")
         await super().stop()
-        if self.vent_relay and self.vent_active:
-            print("CO2Loop stopping: Turning vent OFF.")
+        if self.vent_relay and self.vent_active: # vent_active refers to primary
+            print("CO2Loop stopping: Turning Primary CO2 vent OFF.")
             self.vent_relay.off()
-            self.vent_active = False
+        if self.second_co2_relay and self.second_co2_relay.value: # Check actual state for secondary
+            print("CO2Loop stopping: Turning Secondary CO2 vent OFF.")
+            self.second_co2_relay.off()
+        self.vent_active = False
         # No need to print stopped message, BaseLoop handles it.
 
     def reset_control(self):
-        """Resets the vent state, ensuring it's off."""
-        print("CO2Loop: Resetting control state (forcing vent OFF).")
-        if self.vent_relay and self.vent_active:
+        """Resets the CO2 injection state, ensuring all solenoids are off."""
+        print("CO2Loop: Resetting control state (forcing all CO2 solenoids OFF).")
+        if self.vent_relay and self.vent_active: # vent_active refers to primary
             self.vent_relay.off()
+        if self.second_co2_relay and self.second_co2_relay.value: # Check actual state for secondary
+            self.second_co2_relay.off()
         self.vent_active = False
         self._vent_start_time = None
 
