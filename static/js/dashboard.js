@@ -151,7 +151,13 @@ function updateUI(data) {
     };
 
     // Temperature
-    document.getElementById('temp-current').textContent = data.temperature !== null ? data.temperature.toFixed(2) : '--';
+    let tempDisplay = '--'; // Default fallback
+    if (data.temperature === "NC") {
+        tempDisplay = "NC";
+    } else if (typeof data.temperature === 'number') {
+        tempDisplay = data.temperature.toFixed(2);
+    }
+    document.getElementById('temp-current').textContent = tempDisplay;
     document.getElementById('temp-setpoint-display').textContent = data.temp_setpoint !== null ? data.temp_setpoint.toFixed(2) : '--';
     updateRelayStatus('heater-status', data.heater_on, 'Heater');
     // Only update input if it doesn't have focus to avoid disrupting user input

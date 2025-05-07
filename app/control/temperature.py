@@ -187,8 +187,9 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
     def get_status(self) -> dict:
         """Returns the current status of the temperature loop."""
+        current_temp_display = "NC" if self.current_temperature is None else self.current_temperature
         return {
-            "temperature": self.current_temperature,
+            "temperature": current_temp_display,
             "setpoint": self.setpoint,
             "heater_on": self.heater_is_on, # Use property which checks incubator_running
             "pid_p": self.pid.Kp,
