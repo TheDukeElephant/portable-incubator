@@ -70,6 +70,32 @@ The system follows a layered architecture:
 | CO2 Solenoid 2 Relay | Digital   | 12              | Secondary CO2 control     |
 | Argon Valve Relay  | Digital   | 23              | General Purpose Output    |
 
+### PT100 Temperature Sensor (MAX31865)
+
+The system now utilizes a PT100 RTD temperature sensor connected via a MAX31865 RTD-to-Digital converter for precise temperature measurements.
+
+#### MAX31865 to Raspberry Pi Wiring:
+
+*   **SCLK (Serial Clock):** RPi Physical Pin 23 (BCM GPIO11)
+*   **MOSI (Master Out Slave In) / SDI:** RPi Physical Pin 19 (BCM GPIO10)
+*   **MISO (Master In Slave Out) / SDO:** RPi Physical Pin 21 (BCM GPIO9)
+*   **CS (Chip Select):** RPi Physical Pin 24 (BCM GPIO8 - SPI0 CE0)
+*   **VIN:** RPi Pin 1 (3.3V PWR)
+*   **GND:** RPi Pin 6 (GND)
+
+**Note on PT100 Connection:** The PT100 sensor connects to the MAX31865 board. Depending on your specific MAX31865 board and PT100 sensor, you can use 2-wire, 3-wire, or 4-wire configurations. Always consult the datasheet for your MAX31865 board for correct wiring.
+
+#### Raspberry Pi Configuration:
+
+The SPI interface on the Raspberry Pi must be enabled for the MAX31865 to function. This can typically be done using the `sudo raspi-config` utility:
+1.  Navigate to `Interface Options`.
+2.  Select `SPI`.
+3.  Choose `&lt;Yes&gt;` to enable the SPI interface.
+4.  Reboot if prompted.
+
+#### Software Dependency:
+
+The `adafruit-circuitpython-max31865` library is required for interfacing with the sensor. This has been added to `requirements.txt` and should be installed during the setup process (`pip install -r requirements.txt`).
 *   **Single-Board Computer (SBC):** Raspberry Pi (recommended) or similar Linux-based SBC capable of running Python and interfacing with GPIO.
 *   **Sensors:**
     *   DHT22 (or similar) for Temperature and Humidity.

@@ -7,5 +7,6 @@ simple-pid==2.0.0
 gpiozero==2.0          # replaces RPi.GPIO
 adafruit-circuitpython-dht
 adafruit-blinka
+adafruit-circuitpython-max31865
 pyserial_asyncio
 smbus2                   # For I2C communication (O2 Sensor, potentially others)

@@ -1,7 +1,8 @@
 import asyncio
 import time
 from simple_pid import PID
-from ..hal.dht_sensor import DHT22Sensor
+# from ..hal.dht_sensor import DHT22Sensor # Replaced by MAX31865
+from ..hal.max31865_sensor import MAX31865 # Import new sensor
 from ..hal.relay_output import RelayOutput
 from .base_loop import BaseLoop # Import BaseLoop
 # Forward declaration for type hinting
@@ -12,11 +13,11 @@ if TYPE_CHECKING:
 class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     """
     Manages the temperature control loop using a PID controller.
-    Reads temperature from a DHT22 sensor and controls a heater relay.
+    Reads temperature from a MAX31865 sensor and controls a heater relay.
     """
     def __init__(self,
                  manager: 'ControlManager', # Add manager argument
-                 temp_sensor: DHT22Sensor,
+                 temp_sensor: MAX31865, # Changed to MAX31865
                  heater_relay: RelayOutput,
                  enabled_attr: str, # Accept the enabled attribute name
                  p: float = 5.0,
@@ -31,7 +32,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
         Args:
             manager: The ControlManager instance.
-            temp_sensor: Instance of DHT22Sensor.
+            temp_sensor: Instance of MAX31865 sensor.
             heater_relay: Instance of RelayOutput for the heater.
             enabled_attr: The attribute name in the manager for the enabled state.
             p: Proportional gain for PID.
@@ -63,20 +64,19 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         print(f"TemperatureLoop initialized. Initial Temp: {self._current_temperature}°C, Setpoint: {self.pid.setpoint}°C")
 
     def _read_sensor(self):
-        """Reads the sensor and updates the internal temperature state."""
-        import random
-        temp, _ = self.temp_sensor.read() # We only need temperature here
+        """Reads the MAX31865 sensor and updates the internal temperature state."""
+        # import random # No longer needed
+        # temp, _ = self.temp_sensor.read() # Old DHT22 call
+        temp = self.temp_sensor.read_temperature() # New MAX31865 call
+
         if temp is not None:
-            # Add a small random fluctuation to the temperature
-            self._current_temperature = temp + random.uniform(-0.5, 0.5)
+            self._current_temperature = temp
+            # print(f"DEBUG: Temperature read: {self._current_temperature}°C") # Optional debug
         else:
-            # Keep the last known temperature if read fails? Or set to None?
-            # Setting to None might be safer to prevent PID windup on stale data.
-            # self._current_temperature = None # Option 1: Indicate failure clearly
-            print("Warning: Failed to read temperature sensor.")
-            # Option 2: Keep last known value (use with caution)
-            # print(f"Warning: Failed to read temperature sensor. Using last known value: {self._current_temperature}")
-            pass # Keep last known value for now
+            # Setting to None is important for safety logic in control_step
+            self._current_temperature = None
+            print("Warning: Failed to read temperature from MAX31865 sensor or sensor not initialized.")
+            # No longer keeping last known value, None indicates an issue.
 
     # def _update_control(self): # <-- REMOVE this method, logic moved to control_step
     #     """Calculates PID output and updates the heater relay state."""
@@ -189,37 +189,76 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     # def close(self): ...
     # def __del__(self): ...
 
-# Example Usage (Conceptual - requires running within an asyncio loop)
+# Example Usage (Conceptual - requires running within an asyncio loop and MAX31865 setup)
 # async def main():
+#     import board # Required for MAX31865
 #     from ..hal.relay_output import RelayOutput
-#     from ..hal.dht_sensor import DHT22Sensor
+#     # from ..hal.dht_sensor import DHT22Sensor # Old sensor
+#     from ..hal.max31865_sensor import MAX31865 # New sensor
+#
 #     # Need a dummy manager for example
-#     class DummyManager: incubator_running = True
+#     class DummyManager:
+#         def __init__(self):
+#             self.temperature_control_enabled = True # Example attribute
 #     manager = DummyManager()
-#     DHT_PIN = 4
-#     HEATER_PIN = 17
 #
-#     sensor = DHT22Sensor(DHT_PIN)
-#     relay = RelayOutput(HEATER_PIN)
+#     HEATER_PIN = 17 # Example GPIO pin for heater
 #
-#     loop = TemperatureLoop(manager=manager, temp_sensor=sensor, heater_relay=relay, setpoint=30.0, sample_time=2)
+#     # Initialize MAX31865 sensor
+#     # Ensure SPI is enabled: sudo raspi-config
+#     # Connections: SCLK=GPIO11, MOSI=GPIO10, MISO=GPIO9, CS=GPIO8
+#     try:
+#         max_sensor = MAX31865(cs_pin=board.D8) # GPIO8 is board.D8
+#         if max_sensor.sensor is None:
+#             print("Failed to initialize MAX31865, exiting example.")
+#             return
+#     except Exception as e:
+#         print(f"Error initializing MAX31865: {e}")
+#         return
 #
-#     run_task = asyncio.create_task(loop.run())
+#     heater_relay = RelayOutput(HEATER_PIN)
+#
+#     # Note: 'enabled_attr' should match an attribute in DummyManager
+#     temp_loop = TemperatureLoop(manager=manager,
+#                                 temp_sensor=max_sensor,
+#                                 heater_relay=heater_relay,
+#                                 enabled_attr='temperature_control_enabled', # Matches DummyManager
+#                                 setpoint=30.0,
+#                                 sample_time=2)
+#
+#     print("Starting TemperatureLoop example...")
+#     run_task = asyncio.create_task(temp_loop.run())
 #
 #     # Simulate running for a while
-#     await asyncio.sleep(10)
-#     loop.setpoint = 32.0
-#     await asyncio.sleep(5)
-#     print("Simulating incubator stop...")
-#     manager.incubator_running = False # Stop the incubator
-#     await asyncio.sleep(5) # See if heater turns off
-#     print("Simulating incubator start...")
-#     manager.incubator_running = True # Start again
-#     await asyncio.sleep(5)
+#     try:
+#         await asyncio.sleep(10)
+#         print("Updating setpoint to 32.0°C")
+#         temp_loop.setpoint = 32.0
+#         await asyncio.sleep(10)
 #
-#     await loop.stop() # Stop the loop task itself
-#     await run_task # Wait for loop to finish cleanly
-#     relay.close() # Explicitly close relay if needed
+#         print("Simulating disabling temperature control...")
+#         manager.temperature_control_enabled = False
+#         await asyncio.sleep(5) # Give time for loop to react
+#         print(f"Heater on after disable: {temp_loop.heater_is_on}")
+#
+#         print("Simulating enabling temperature control...")
+#         manager.temperature_control_enabled = True
+#         await asyncio.sleep(10) # Give time for loop to react
+#         print(f"Heater on after re-enable: {temp_loop.heater_is_on}")
+#
+#     except KeyboardInterrupt:
+#         print("Keyboard interrupt received.")
+#     finally:
+#         print("Stopping TemperatureLoop example...")
+#         await temp_loop.stop() # Stop the loop task itself
+#         await run_task # Wait for loop to finish cleanly
+#         heater_relay.close() # Explicitly close relay
+#         print("TemperatureLoop example finished.")
 #
 # if __name__ == '__main__':
-#      asyncio.run(main())
+#      # This example requires actual hardware or a well-mocked environment
+#      # For testing, you might mock board, busio, digitalio, adafruit_max31865
+#      # print("To run this example, ensure SPI is configured and a MAX31865 is connected.")
+#      # print("Or, mock the hardware components for software testing.")
+#      # asyncio.run(main())
+#      pass # Commenting out direct run for now as it requires hardware
