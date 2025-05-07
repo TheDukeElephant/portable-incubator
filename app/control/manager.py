@@ -4,10 +4,14 @@ import time
 import json
 import os
 import threading # Added for lock
+import board # Added for MAX31865
+import busio # Added for MAX31865
+import digitalio # Added for MAX31865
 from typing import Dict, Any, Optional, List
 
 # Hardware Abstraction Layer Imports
 from ..hal.dht_sensor import DHT22Sensor
+from ..hal.max31865_sensor import MAX31865 # Added for MAX31865
 from ..hal.o2_sensor import DFRobot_Oxygen_IIC
 from ..hal.relay_output import RelayOutput
 # from ..hal.co2_sensor import CO2Sensor # Import the new dummy sensor # TEMP DISABLED
@@ -85,6 +89,24 @@ class ControlManager:
         print("  Initializing HAL components...")
         self.dht_sensor = DHT22Sensor(DHT_PIN)
         self.dht_sensor.start_background_initialization()
+
+        # Initialize MAX31865 Sensor
+        print("  Initializing MAX31865 sensor...")
+        self.max31865_sensor = None # Default to None
+        try:
+            spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+            # Assuming CS pin is GPIO8 (D8 for Blinka)
+            # You might need to adjust board.D8 if your CS pin is different
+            cs_pin = digitalio.DigitalInOut(board.D8) # GPIO8
+            self.max31865_sensor = MAX31865(spi, cs_pin)
+            print("  MAX31865 sensor initialized successfully.")
+        except (ValueError, RuntimeError) as e:
+            self._logger.warning(f"MAX31865 sensor not detected or failed to initialize: {e}. Temperature control will be degraded.")
+            print(f"  Warning: MAX31865 sensor not detected or failed to initialize: {e}. Temperature control will be degraded.")
+        except Exception as e: # Catch any other potential exceptions from the sensor library
+            self._logger.warning(f"An unexpected error occurred during MAX31865 initialization: {e}. Temperature control will be degraded.")
+            print(f"  Warning: An unexpected error occurred during MAX31865 initialization: {e}. Temperature control will be degraded.")
+
         # self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # O2Loop will instantiate its own sensor
         # Use the CO2_SENSOR_PORT constant defined above
         # self.co2_sensor = CO2Sensor(url=CO2_SENSOR_PORT) # TEMP DISABLED
@@ -98,7 +120,7 @@ class ControlManager:
         print("  Initializing Control Loops...")
         self.temp_loop = TemperatureLoop(
             manager=self, # Pass manager instance
-            temp_sensor=self.dht_sensor,
+            temp_sensor=self.max31865_sensor,
             heater_relay=self.heater_relay,
             setpoint=DEFAULT_TEMP_SETPOINT,
             p=TEMP_PID_P, i=TEMP_PID_I, d=TEMP_PID_D,

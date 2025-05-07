@@ -17,7 +17,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     """
     def __init__(self,
                  manager: 'ControlManager', # Add manager argument
-                 temp_sensor: MAX31865, # Changed to MAX31865
+                 temp_sensor: Optional[MAX31865], # Changed to MAX31865, can be None
                  heater_relay: RelayOutput,
                  enabled_attr: str, # Accept the enabled attribute name
                  p: float = 5.0,
@@ -32,7 +32,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
         Args:
             manager: The ControlManager instance.
-            temp_sensor: Instance of MAX31865 sensor.
+            temp_sensor: Instance of MAX31865 sensor, or None if not available.
             heater_relay: Instance of RelayOutput for the heater.
             enabled_attr: The attribute name in the manager for the enabled state.
             p: Proportional gain for PID.
@@ -60,11 +60,22 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         # self._active = True # Replaced by BaseLoop._is_running and _stop_event
 
         # Attempt initial sensor read
-        self._read_sensor()
+        if self.temp_sensor is None:
+            print("Warning: TemperatureLoop initialized without a temperature sensor. Temperature control will be disabled.")
+            self._logger.warning("TemperatureLoop initialized without a temperature sensor. Heater will be kept off.") # Use logger
+            self._current_temperature = None # Ensure it's None if no sensor
+        else:
+            self._read_sensor() # Read only if sensor exists
         print(f"TemperatureLoop initialized. Initial Temp: {self._current_temperature}°C, Setpoint: {self.pid.setpoint}°C")
 
     def _read_sensor(self):
         """Reads the MAX31865 sensor and updates the internal temperature state."""
+        if self.temp_sensor is None:
+            self._current_temperature = None
+            # Optional: Log this periodically if needed, but initial warning in __init__ might be enough
+            # print("Warning: Attempted to read temperature, but no sensor is available.")
+            return # Exit early if no sensor
+
         # import random # No longer needed
         # temp, _ = self.temp_sensor.read() # Old DHT22 call
         temp = self.temp_sensor.read_temperature() # New MAX31865 call
@@ -75,7 +86,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         else:
             # Setting to None is important for safety logic in control_step
             self._current_temperature = None
-            print("Warning: Failed to read temperature from MAX31865 sensor or sensor not initialized.")
+            print("Warning: Failed to read temperature from MAX31865 sensor.") # Sensor exists but read failed
             # No longer keeping last known value, None indicates an issue.
 
     # def _update_control(self): # <-- REMOVE this method, logic moved to control_step
