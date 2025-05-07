@@ -28,6 +28,17 @@ To address the high system pressure, the following timing constraints are implem
 - Valves are activated for only 0.1 seconds per activation cycle.
 - A mandatory cooldown period of 60 seconds is enforced between activations for each gas type. This allows for proper dilution and prevents rapid cycling.
 
+### Dual CO2 Solenoid System
+
+To enhance CO2 control precision and provide an additional layer of safety, a secondary CO2 solenoid has been implemented. This solenoid is controlled by a relay connected to GPIO 12.
+
+The operational logic for the dual system is as follows:
+1.  The primary CO2 solenoid injects CO2 as per its control logic.
+2.  After the primary solenoid closes, there is a 1-second pause.
+3.  The secondary CO2 solenoid then opens for a brief period of 0.1 seconds.
+
+This staged approach allows for finer adjustments to the CO2 concentration and adds redundancy to the CO2 delivery mechanism.
+
 The system follows a layered architecture:
 
 1.  **Hardware Abstraction Layer (HAL - `app/hal/`):** Provides a standardized interface to interact with physical sensors and actuators, decoupling the core logic from specific hardware implementations.
@@ -56,6 +67,7 @@ The system follows a layered architecture:
 | Humidifier Relay   | Digital   | 27              | General Purpose Output    |
 | Air Pump Relay     | Digital   | 22              | General Purpose Output    |
 | CO2 Vent Relay     | Digital   | 24              | General Purpose Output    |
+| CO2 Solenoid 2 Relay | Digital   | 12              | Secondary CO2 control     |
 | Argon Valve Relay  | Digital   | 23              | General Purpose Output    |
 
 *   **Single-Board Computer (SBC):** Raspberry Pi (recommended) or similar Linux-based SBC capable of running Python and interfacing with GPIO.

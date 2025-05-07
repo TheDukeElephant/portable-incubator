@@ -142,7 +142,7 @@ class CO2Loop(BaseLoop):
             # We know self.current_co2 is a valid number here
             # --- MODIFIED: Invert logic for injection ---
             if self.current_co2 < self._setpoint: # Check if CO2 is LOW
-                if not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 60):
+                if not self.vent_active and (last_activation_time is None or current_time - last_activation_time >= 15):
                     # --- MODIFIED: Update log message ---
                     print(f"CO2 Low ({self.current_co2} ppm < {self._setpoint} ppm). Injecting CO2 (Primary Solenoid) for 0.1 seconds.")
                     self.vent_relay.on()
