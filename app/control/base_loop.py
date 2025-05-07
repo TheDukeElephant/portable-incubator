@@ -1,5 +1,6 @@
 import asyncio
 import time
+import logging # <-- Add this import
 from abc import ABC, abstractmethod
 
 class BaseLoop(ABC):
@@ -30,6 +31,7 @@ class BaseLoop(ABC):
         self._is_running = False
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task | None = None
+        self._logger = logging.getLogger(self.__class__.__name__) # <-- Initialize logger
 
     def _active(self) -> bool:
         """
