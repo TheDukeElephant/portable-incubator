@@ -10,7 +10,7 @@ class MAX31865:
     """
     Hardware Abstraction Layer for the MAX31865 PT100/PT1000 RTD Sensor Amplifier.
     """
-    def __init__(self, cs_pin=board.D8, rtd_nominal_resistance=100.0, ref_resistance=430.0, wires=3):
+    def __init__(self, cs_pin=board.D8, rtd_nominal_resistance=100.0, ref_resistance=430.0, wires=2):
         """
         Initializes the MAX31865 sensor.
 
@@ -114,17 +114,17 @@ class MAX31865:
 
         fault = self.sensor.read_fault()
         if fault:
-            if fault & adafruit_max31865.MAX31865_FAULT_HIGHTHRESH:
+            if fault & adafruit_max31865._MAX31865_FAULT_HIGHTHRESH: # Added underscore
                 logger.warning("MAX31865 Fault: RTD High Threshold")
-            if fault & adafruit_max31865.MAX31865_FAULT_LOWTHRESH:
+            if fault & adafruit_max31865._MAX31865_FAULT_LOWTHRESH: # Added underscore
                 logger.warning("MAX31865 Fault: RTD Low Threshold")
-            if fault & adafruit_max31865.MAX31865_FAULT_REFINLOW:
+            if fault & adafruit_max31865._MAX31865_FAULT_REFINLOW: # Added underscore
                 logger.warning("MAX31865 Fault: REFIN- > 0.85 x VBIAS")
-            if fault & adafruit_max31865.MAX31865_FAULT_REFINHIGH:
+            if fault & adafruit_max31865._MAX31865_FAULT_REFINHIGH: # Added underscore
                 logger.warning("MAX31865 Fault: REFIN- < 0.85 x VBIAS (FORCE- open)")
-            if fault & adafruit_max31865.MAX31865_FAULT_RTDINLOW:
+            if fault & adafruit_max31865._MAX31865_FAULT_RTDINLOW: # Added underscore
                 logger.warning("MAX31865 Fault: RTDIN- < 0.85 x VBIAS (FORCE- open)")
-            if fault & adafruit_max31865.MAX31865_FAULT_OVUV:
+            if fault & adafruit_max31865._MAX31865_FAULT_OVUV: # Added underscore
                 logger.warning("MAX31865 Fault: Overvoltage/undervoltage")
             self.sensor.clear_faults() # Clear faults after reading
         else:
