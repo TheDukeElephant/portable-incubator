@@ -184,6 +184,7 @@ def main():
     print()
     
     # Initialize SPI with explicit mode and frequency
+    # Note: We've confirmed the correct SDI/SDO connections
     spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
     
     # Try to configure SPI with specific parameters
@@ -193,7 +194,6 @@ def main():
             pass
         
         # Configure for MAX31865 (Mode 1: CPOL=0, CPHA=1)
-        # Try a lower frequency (1MHz) for more reliable communication
         spi.configure(baudrate=1000000, polarity=0, phase=1)
         print("SPI configured with: 1MHz, CPOL=0, CPHA=1 (Mode 1)")
     finally:
@@ -208,7 +208,7 @@ def main():
     reset_max31865(spi, cs)
     
     # Configure the sensor
-    configure_sensor(spi, cs, wires=2)  # Change to 3 for 3-wire mode
+    configure_sensor(spi, cs, wires=2)  # Change to 3 for 3-wire mode if needed
     
     # Read and display fault status
     fault_status, faults = read_fault_status(spi, cs)
