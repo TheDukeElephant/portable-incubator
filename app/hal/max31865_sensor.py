@@ -118,8 +118,19 @@ class MAX31865:
         if self.sensor is None:
             return
 
-        fault = self.sensor.read_fault()
+        # Try accessing fault via property instead of method for v2.2.20
+        try:
+            fault = self.sensor.fault
+            logger.debug(f"Read fault register value: {fault}")
+        except AttributeError:
+             logger.error("Could not read fault status: 'sensor.fault' attribute does not exist.")
+             return # Cannot proceed if fault status unavailable
+        except Exception as e:
+             logger.error(f"Error reading fault status: {e}")
+             return
+
         if fault:
+            logger.warning(f"MAX31865 Fault detected (Code: {fault})!") # Log the raw code
             if fault & adafruit_max31865._MAX31865_FAULT_HIGHTHRESH: # Added underscore
                 logger.warning("MAX31865 Fault: RTD High Threshold")
             if fault & adafruit_max31865._MAX31865_FAULT_LOWTHRESH: # Added underscore
