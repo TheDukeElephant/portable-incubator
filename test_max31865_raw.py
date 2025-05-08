@@ -37,12 +37,19 @@ def read_register(spi, cs, reg_addr):
     read_cmd = bytearray([reg_addr | 0x80, 0x00])
     result = bytearray(2)
     
+    # Add a small delay before selecting chip
+    time.sleep(0.001)
     cs.value = False  # Select chip
+    time.sleep(0.001)  # Small delay after chip select
+    
     try:
         spi.write(read_cmd)
+        time.sleep(0.001)  # Small delay between write and read
         spi.readinto(result)
     finally:
+        time.sleep(0.001)  # Small delay before deselecting
         cs.value = True  # Deselect chip
+        time.sleep(0.001)  # Small delay after deselect
     
     return result[1]  # Return the data byte
 
@@ -154,6 +161,21 @@ def calculate_temperature(rtd_value, rtd_nominal=100.0, ref_resistance=430.0):
         logger.error(f"Error calculating temperature: {e}")
         return None
 
+def reset_max31865(spi, cs):
+    """Perform a software reset of the MAX31865."""
+    print("Performing software reset of MAX31865...")
+    
+    # Write 0x00 to clear the configuration register
+    write_register(spi, cs, CONFIG_REG, 0x00)
+    time.sleep(0.1)  # Short delay
+    
+    # Read back to verify
+    read_config = read_register(spi, cs, CONFIG_REG)
+    print(f"After reset, config register: 0x{read_config:02X}")
+    
+    # Wait a bit longer before continuing
+    time.sleep(0.5)
+
 def main():
     print("MAX31865 Raw Register Test")
     print("-------------------------")
@@ -161,11 +183,29 @@ def main():
     print("Press Ctrl+C to exit.")
     print()
     
-    # Initialize SPI and CS
+    # Initialize SPI with explicit mode and frequency
     spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+    
+    # Try to configure SPI with specific parameters
+    try:
+        # Lock SPI bus
+        while not spi.try_lock():
+            pass
+        
+        # Configure for MAX31865 (Mode 1: CPOL=0, CPHA=1)
+        # Try a lower frequency (1MHz) for more reliable communication
+        spi.configure(baudrate=1000000, polarity=0, phase=1)
+        print("SPI configured with: 1MHz, CPOL=0, CPHA=1 (Mode 1)")
+    finally:
+        # Unlock SPI bus
+        spi.unlock()
+    
     cs = digitalio.DigitalInOut(board.D8)  # GPIO8
     cs.direction = digitalio.Direction.OUTPUT
     cs.value = True  # Deselect initially
+    
+    # Add reset before configuration
+    reset_max31865(spi, cs)
     
     # Configure the sensor
     configure_sensor(spi, cs, wires=2)  # Change to 3 for 3-wire mode
