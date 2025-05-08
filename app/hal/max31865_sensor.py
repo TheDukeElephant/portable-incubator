@@ -23,7 +23,14 @@ class MAX31865:
         self.sensor = None
         try:
             # SPI setup
-            spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+            # Try with explicit pin objects for SCK, MOSI, MISO
+            sck_pin = board.SCK # Or board.D11
+            mosi_pin = board.MOSI # Or board.D10
+            miso_pin = board.MISO # Or board.D9
+            
+            logger.debug(f"Attempting SPI with SCK: {sck_pin}, MOSI: {mosi_pin}, MISO: {miso_pin}")
+            spi = busio.SPI(sck_pin, MOSI=mosi_pin, MISO=miso_pin)
+            
             cs = digitalio.DigitalInOut(cs_pin)  # Chip select
             cs.direction = digitalio.Direction.OUTPUT
             cs.value = True # Deselect
@@ -35,18 +42,28 @@ class MAX31865:
                 ref_resistance=ref_resistance,
                 wires=wires
             )
-            logger.info(f"MAX31865 sensor initialized on CS pin {cs_pin} with {wires}-wire configuration.")
+            logger.info(f"MAX31865 sensor object created for CS pin {cs_pin} with {wires}-wire configuration using SPI bus: {spi}")
+            # Test sensor communication immediately
+            _ = self.sensor.temperature # Try a benign read
+            logger.info("MAX31865 sensor communication successful after initialization.")
         except RuntimeError as e:
-            logger.error(f"Failed to initialize MAX31865 sensor: {e}")
+            logger.error(f"Failed to initialize MAX31865 sensor (RuntimeError): {e}")
             logger.error("This might be due to incorrect wiring, SPI not enabled, or the sensor not being connected.")
             logger.error("Please check your hardware setup and ensure SPI is enabled on your Raspberry Pi (sudo raspi-config).")
             self.sensor = None # Ensure sensor is None if initialization fails
+            raise # Re-raise to make it clear to the caller
         except ValueError as e:
-            logger.error(f"Failed to initialize MAX31865 sensor due to invalid pin: {e}")
+            logger.error(f"Failed to initialize MAX31865 sensor due to invalid pin (ValueError): {e}")
             self.sensor = None
+            raise # Re-raise
+        except AttributeError as e: # Specifically catch AttributeError like 'SPI' object has no attribute 'id'
+            logger.error(f"Failed to initialize MAX31865 sensor (AttributeError, possibly SPI issue): {e}")
+            self.sensor = None
+            raise # Re-raise
         except Exception as e:
-            logger.error(f"An unexpected error occurred during MAX31865 initialization: {e}")
+            logger.error(f"An unexpected error occurred during MAX31865 initialization: {e.__class__.__name__}: {e}")
             self.sensor = None
+            raise # Re-raise
 
     def read_temperature(self):
         """
