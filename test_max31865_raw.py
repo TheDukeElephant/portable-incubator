@@ -105,8 +105,8 @@ def read_fault_status(spi, cs):
 
 def configure_sensor(spi, cs, wires=2):
     """Configure the MAX31865 sensor."""
-    # Default configuration: bias on, auto conversion, 2/4-wire, fault detection
-    config = BIAS_BIT | CONVERSION_MODE_BIT
+    # Try a simpler configuration: bias on, one-shot conversion, 2/4-wire
+    config = BIAS_BIT | ONE_SHOT_BIT  # Remove auto conversion
     
     # Set wire mode (3-wire or 2/4-wire)
     if wires == 3:
