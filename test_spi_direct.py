@@ -28,11 +28,18 @@ def test_loopback():
     
     return result[0]
 
-# Run the test
-for i in range(5):
-    print(f"\nTest {i+1}:")
-    result = test_loopback()
-    time.sleep(0.5)
-
-# Close SPI
-spi.close()
+try:
+    print("\nRunning simple SPI loopback test...")
+    print("This will test if SPI is working at all.")
+    print("If MISO and MOSI are connected, you should see the same data returned.")
+    print("If not connected, you'll likely see zeros or random data.")
+    
+    for i in range(5):
+        print(f"\nTest {i+1}:")
+        result = test_loopback()
+        time.sleep(0.5)
+    
+except KeyboardInterrupt:
+    print("\nTest script terminated by user.")
+finally:
+    spi.close()
