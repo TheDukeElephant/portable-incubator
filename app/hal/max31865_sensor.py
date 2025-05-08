@@ -58,11 +58,11 @@ class MAX31865:
             self.sensor = adafruit_max31865.MAX31865(
                 spi,
                 cs,
-                rtd_nominal_resistance=rtd_nominal_resistance,
-                ref_resistance=ref_resistance,
-                wires=wires
+                # rtd_nominal_resistance=rtd_nominal_resistance, # Removed for testing
+                # ref_resistance=ref_resistance, # Removed for testing
+                wires=wires # Keep wires for now, common parameter
             )
-            logger.info(f"MAX31865 sensor object created for CS pin {cs_pin} with {wires}-wire configuration using SPI bus: {spi}")
+            logger.info(f"MAX31865 sensor object created for CS pin {cs_pin} with {wires}-wire configuration using SPI bus: {spi} (nominal/ref resistances defaulted by library)")
             # Test sensor communication immediately
             _ = self.sensor.temperature # Try a benign read
             logger.info("MAX31865 sensor communication successful after initialization.")
