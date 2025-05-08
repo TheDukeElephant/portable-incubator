@@ -36,13 +36,19 @@ class MAX31865:
             
             # --- Monkey-patch for 'id' attribute ---
             if not hasattr(spi, 'id'):
-                logger.info("Monkey-patching SPI object with an 'id' attribute (set to 0).")
-                spi.id = 0
+                logger.info("Monkey-patching SPI object with an 'id' attribute (set to 0) using setattr().")
+                setattr(spi, 'id', 0) # Use setattr
             # --- End monkey-patch ---
             
             cs = digitalio.DigitalInOut(cs_pin)  # Chip select
             cs.direction = digitalio.Direction.OUTPUT
             cs.value = True # Deselect
+
+            # Verify monkey-patch right before use
+            if hasattr(spi, 'id'):
+                logger.info(f"CONFIRMED: spi object HAS 'id' attribute ({spi.id=}) before passing to MAX31865 constructor.")
+            else:
+                logger.error("CRITICAL: spi object DOES NOT HAVE 'id' attribute immediately before passing to MAX31865 constructor.")
 
             self.sensor = adafruit_max31865.MAX31865(
                 spi,
@@ -55,22 +61,12 @@ class MAX31865:
             # Test sensor communication immediately
             _ = self.sensor.temperature # Try a benign read
             logger.info("MAX31865 sensor communication successful after initialization.")
-        except RuntimeError as e:
-            logger.error(f"Failed to initialize MAX31865 sensor (RuntimeError): {e}")
-            logger.error("This might be due to incorrect wiring, SPI not enabled, or the sensor not being connected.")
-            logger.error("Please check your hardware setup and ensure SPI is enabled on your Raspberry Pi (sudo raspi-config).")
-            self.sensor = None # Ensure sensor is None if initialization fails
-            raise # Re-raise to make it clear to the caller
-        except ValueError as e:
-            logger.error(f"Failed to initialize MAX31865 sensor due to invalid pin (ValueError): {e}")
-            self.sensor = None
-            raise # Re-raise
         except AttributeError as e: # Specifically catch AttributeError like 'SPI' object has no attribute 'id'
-            logger.error(f"Failed to initialize MAX31865 sensor (AttributeError, possibly SPI issue): {e}")
+            logger.error(f"Failed to initialize MAX31865 sensor (AttributeError): {e}")
             self.sensor = None
             raise # Re-raise
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during MAX31865 initialization: {e.__class__.__name__}: {e}")
+        except Exception as e: # Catch other potential errors during init
+            logger.error(f"An unexpected error occurred during MAX31865 initialization ({e.__class__.__name__}): {e}")
             self.sensor = None
             raise # Re-raise
 
