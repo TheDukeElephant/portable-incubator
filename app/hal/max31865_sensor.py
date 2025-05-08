@@ -30,6 +30,9 @@ class MAX31865:
             
             logger.debug(f"Attempting SPI with SCK: {sck_pin}, MOSI: {mosi_pin}, MISO: {miso_pin}")
             spi = busio.SPI(sck_pin, MOSI=mosi_pin, MISO=miso_pin)
+            logger.info(f"busio.SPI object created: {spi}") # Log the object itself
+            logger.info(f"Type of spi object: {type(spi)}")
+            logger.info(f"Attributes of spi object: {dir(spi)}") # Log all attributes
             
             cs = digitalio.DigitalInOut(cs_pin)  # Chip select
             cs.direction = digitalio.Direction.OUTPUT
