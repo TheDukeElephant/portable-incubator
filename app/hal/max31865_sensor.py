@@ -55,17 +55,21 @@ class MAX31865:
             else:
                 logger.error("CRITICAL: spi object DOES NOT HAVE 'id' attribute immediately before passing to MAX31865 constructor.")
 
-            self.sensor = adafruit_max31865.MAX31865(
-                spi,
-                cs,
-                rtd_nominal_resistance, # Pass as positional
-                ref_resistance,       # Pass as positional
-                wires                 # Pass as positional (or keyword if it's the last one accepted that way)
-            )
-            logger.info(f"MAX31865 sensor object created for CS pin {cs_pin} with {wires}-wire, RTD nominal {rtd_nominal_resistance} Ohm, Ref {ref_resistance} Ohm, using SPI bus: {spi}")
-            # Test sensor communication immediately
+            # Call constructor with only spi and cs (as per TypeError for v2.2.20)
+            self.sensor = adafruit_max31865.MAX31865(spi, cs)
+            logger.info(f"Adafruit MAX31865 object created for CS pin {cs_pin} using SPI bus: {spi}")
+
+            # Configure properties AFTER initialization for v2.2.20
+            logger.info(f"Setting sensor wires to: {wires}")
+            self.sensor.wires = wires
+            # Assuming library defaults rtd_nominal=100, ref_resistance=430 for now.
+            # If needed, add:
+            # self.sensor.rtd_nominal_resistance = rtd_nominal_resistance
+            # self.sensor.ref_resistance = ref_resistance
+
+            # Test sensor communication immediately after configuration
             _ = self.sensor.temperature # Try a benign read
-            logger.info("MAX31865 sensor communication successful after initialization.")
+            logger.info("MAX31865 sensor communication successful after initialization and configuration.")
         except AttributeError as e: # Specifically catch AttributeError like 'SPI' object has no attribute 'id'
             logger.error(f"Failed to initialize MAX31865 sensor (AttributeError): {e}")
             self.sensor = None
