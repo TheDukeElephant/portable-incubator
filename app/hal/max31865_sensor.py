@@ -69,9 +69,39 @@ class MAX31865:
             logger.info(f"Setting sensor reference resistance to: {ref_resistance}")
             self.sensor.ref_resistance = ref_resistance
 
+            # Clear any existing faults before first read
+            try:
+                self.sensor.clear_faults()
+                logger.info("Cleared any existing faults during initialization")
+            except AttributeError:
+                logger.warning("Could not clear faults - method not available")
+            except Exception as e:
+                logger.warning(f"Error clearing faults: {e}")
+
             # Test sensor communication immediately after configuration
-            _ = self.sensor.temperature # Try a benign read
-            logger.info("MAX31865 sensor communication successful after initialization and configuration.")
+            try:
+                temp = self.sensor.temperature # Try a benign read
+                logger.info(f"Initial temperature reading: {temp}°C")
+                if temp < -240:
+                    logger.warning("Initial temperature reading indicates a fault condition")
+                    self._handle_fault()  # Check for specific faults
+                    logger.info("Checking RTD resistance value...")
+                    try:
+                        rtd = self.sensor.rtd
+                        logger.info(f"RTD resistance value: {rtd} ohms")
+                        # For PT100, resistance should be ~100 ohms at 0°C
+                        # If it's 0 or very low, there's likely a connection issue
+                        if rtd < 10:
+                            logger.error("RTD resistance is too low - check sensor connection")
+                        elif rtd > 400:
+                            logger.error("RTD resistance is too high - check sensor connection")
+                    except Exception as e:
+                        logger.error(f"Could not read RTD resistance: {e}")
+                else:
+                    logger.info("MAX31865 sensor communication successful after initialization and configuration.")
+            except Exception as e:
+                logger.error(f"Error during initial temperature read: {e}")
+                self._handle_fault()  # Check for specific faults
         except AttributeError as e: # Specifically catch AttributeError like 'SPI' object has no attribute 'id'
             logger.error(f"Failed to initialize MAX31865 sensor (AttributeError): {e}")
             self.sensor = None
@@ -146,30 +176,112 @@ class MAX31865:
             logger.warning(f"MAX31865 Fault detected (Tuple: {fault})!")
             try:
                 # Check individual tuple elements based on assumed order
-                if fault[0]: logger.warning("MAX31865 Fault: RTD High Threshold")
-                if fault[1]: logger.warning("MAX31865 Fault: RTD Low Threshold")
-                if fault[2]: logger.warning("MAX31865 Fault: REFIN- > 0.85 x VBIAS")
-                if fault[3]: logger.warning("MAX31865 Fault: REFIN- < 0.85 x VBIAS (FORCE- open)")
-                if fault[4]: logger.warning("MAX31865 Fault: RTDIN- < 0.85 x VBIAS (FORCE- open)")
-                if fault[5]: logger.warning("MAX31865 Fault: Overvoltage/undervoltage")
+                if fault[0]: 
+                    logger.warning("MAX31865 Fault: RTD High Threshold - Check for short circuit or incorrect wiring")
+                if fault[1]: 
+                    logger.warning("MAX31865 Fault: RTD Low Threshold - Check for open circuit or disconnected sensor")
+                if fault[2]: 
+                    logger.warning("MAX31865 Fault: REFIN- > 0.85 x VBIAS - Check reference resistor")
+                if fault[3]: 
+                    logger.warning("MAX31865 Fault: REFIN- < 0.85 x VBIAS (FORCE- open) - Check for open circuit")
+                if fault[4]: 
+                    logger.warning("MAX31865 Fault: RTDIN- < 0.85 x VBIAS (FORCE- open) - Check for open circuit")
+                if fault[5]: 
+                    logger.warning("MAX31865 Fault: Overvoltage/undervoltage - Check power supply")
+                
+                # Try to read RTD resistance for additional diagnostics
+                try:
+                    rtd = self.sensor.rtd
+                    logger.info(f"Current RTD resistance: {rtd} ohms")
+                    if rtd < 10:
+                        logger.error("RTD resistance is too low - likely a short circuit")
+                    elif rtd > 400:
+                        logger.error("RTD resistance is too high - likely an open circuit")
+                except Exception as e:
+                    logger.error(f"Could not read RTD resistance: {e}")
+                
+                # Try to clear faults - this might fail if method name changed
+                try:
+                    self.sensor.clear_faults()
+                    logger.debug("Attempted to clear MAX31865 faults.")
+                except AttributeError:
+                    logger.warning("'sensor.clear_faults()' method not found for this library version.")
+                except Exception as e:
+                    logger.error(f"Error calling clear_faults(): {e}")
             except IndexError:
                  logger.error(f"Fault tuple has unexpected length: {len(fault)}")
             except Exception as e:
                  logger.error(f"Error decoding fault tuple: {e}")
-
-            # Try to clear faults - this might fail if method name changed
-            try:
-                self.sensor.clear_faults()
-                logger.debug("Attempted to clear MAX31865 faults.")
-            except AttributeError:
-                logger.warning("'sensor.clear_faults()' method not found for this library version.")
-            except Exception as e:
-                logger.error(f"Error calling clear_faults(): {e}")
         elif isinstance(fault, tuple):
             logger.debug("No specific fault flags set in fault tuple.")
         else:
             # If fault is not a tuple (e.g., None or unexpected type)
              logger.warning(f"Unexpected fault status type received: {type(fault)}, value: {fault}")
+
+    def diagnose(self):
+        """
+        Run diagnostics on the MAX31865 sensor and return detailed information.
+        This can be called to help troubleshoot connection issues.
+        """
+        if self.sensor is None:
+            logger.error("Cannot diagnose - sensor not initialized")
+            return "Sensor not initialized"
+        
+        results = []
+        results.append(f"MAX31865 Diagnostics:")
+        
+        # Check temperature reading
+        try:
+            temp = self.sensor.temperature
+            results.append(f"Temperature reading: {temp}°C")
+            if temp < -240:
+                results.append("WARNING: Temperature reading indicates a fault condition")
+        except Exception as e:
+            results.append(f"Error reading temperature: {e}")
+        
+        # Check RTD resistance
+        try:
+            rtd = self.sensor.rtd
+            results.append(f"RTD resistance: {rtd} ohms")
+            # For PT100, resistance should be ~100 ohms at 0°C, ~138.5 ohms at 100°C
+            if rtd < 10:
+                results.append("ERROR: RTD resistance is too low - likely a short circuit")
+            elif rtd > 400:
+                results.append("ERROR: RTD resistance is too high - likely an open circuit")
+            elif 90 <= rtd <= 150:
+                results.append("RTD resistance is in expected range for PT100")
+            else:
+                results.append("WARNING: RTD resistance is outside typical PT100 range")
+        except Exception as e:
+            results.append(f"Error reading RTD resistance: {e}")
+        
+        # Check configuration
+        try:
+            results.append(f"Wires configuration: {self.sensor.wires}")
+            results.append(f"RTD nominal resistance: {self.sensor.rtd_nominal_resistance}")
+            results.append(f"Reference resistance: {self.sensor.ref_resistance}")
+        except Exception as e:
+            results.append(f"Error reading configuration: {e}")
+        
+        # Check for faults
+        try:
+            fault = self.sensor.fault
+            results.append(f"Fault register: {fault}")
+            if isinstance(fault, tuple) and any(fault):
+                if fault[0]: results.append("Fault: RTD High Threshold - Check for short circuit")
+                if fault[1]: results.append("Fault: RTD Low Threshold - Check for open circuit")
+                if fault[2]: results.append("Fault: REFIN- > 0.85 x VBIAS - Check reference resistor")
+                if fault[3]: results.append("Fault: REFIN- < 0.85 x VBIAS (FORCE- open)")
+                if fault[4]: results.append("Fault: RTDIN- < 0.85 x VBIAS (FORCE- open)")
+                if fault[5]: results.append("Fault: Overvoltage/undervoltage")
+        except Exception as e:
+            results.append(f"Error reading fault status: {e}")
+        
+        # Log all results
+        for line in results:
+            logger.info(line)
+        
+        return "\n".join(results)
 
 if __name__ == '__main__':
     # Basic test usage
