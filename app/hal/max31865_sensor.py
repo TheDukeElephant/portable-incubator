@@ -137,23 +137,35 @@ class MAX31865:
              logger.error(f"Error reading fault status: {e}")
              return
 
-        if fault:
-            logger.warning(f"MAX31865 Fault detected (Code: {fault})!") # Log the raw code
-            if fault & adafruit_max31865._MAX31865_FAULT_HIGHTHRESH: # Added underscore
-                logger.warning("MAX31865 Fault: RTD High Threshold")
-            if fault & adafruit_max31865._MAX31865_FAULT_LOWTHRESH: # Added underscore
-                logger.warning("MAX31865 Fault: RTD Low Threshold")
-            if fault & adafruit_max31865._MAX31865_FAULT_REFINLOW: # Added underscore
-                logger.warning("MAX31865 Fault: REFIN- > 0.85 x VBIAS")
-            if fault & adafruit_max31865._MAX31865_FAULT_REFINHIGH: # Added underscore
-                logger.warning("MAX31865 Fault: REFIN- < 0.85 x VBIAS (FORCE- open)")
-            if fault & adafruit_max31865._MAX31865_FAULT_RTDINLOW: # Added underscore
-                logger.warning("MAX31865 Fault: RTDIN- < 0.85 x VBIAS (FORCE- open)")
-            if fault & adafruit_max31865._MAX31865_FAULT_OVUV: # Added underscore
-                logger.warning("MAX31865 Fault: Overvoltage/undervoltage")
-            self.sensor.clear_faults() # Clear faults after reading
+        # Check if any element in the fault tuple is True
+        if isinstance(fault, tuple) and any(fault):
+            logger.warning(f"MAX31865 Fault detected (Tuple: {fault})!")
+            try:
+                # Check individual tuple elements based on assumed order
+                if fault[0]: logger.warning("MAX31865 Fault: RTD High Threshold")
+                if fault[1]: logger.warning("MAX31865 Fault: RTD Low Threshold")
+                if fault[2]: logger.warning("MAX31865 Fault: REFIN- > 0.85 x VBIAS")
+                if fault[3]: logger.warning("MAX31865 Fault: REFIN- < 0.85 x VBIAS (FORCE- open)")
+                if fault[4]: logger.warning("MAX31865 Fault: RTDIN- < 0.85 x VBIAS (FORCE- open)")
+                if fault[5]: logger.warning("MAX31865 Fault: Overvoltage/undervoltage")
+            except IndexError:
+                 logger.error(f"Fault tuple has unexpected length: {len(fault)}")
+            except Exception as e:
+                 logger.error(f"Error decoding fault tuple: {e}")
+
+            # Try to clear faults - this might fail if method name changed
+            try:
+                self.sensor.clear_faults()
+                logger.debug("Attempted to clear MAX31865 faults.")
+            except AttributeError:
+                logger.warning("'sensor.clear_faults()' method not found for this library version.")
+            except Exception as e:
+                logger.error(f"Error calling clear_faults(): {e}")
+        elif isinstance(fault, tuple):
+            logger.debug("No specific fault flags set in fault tuple.")
         else:
-            logger.debug("No faults detected on MAX31865.")
+            # If fault is not a tuple (e.g., None or unexpected type)
+             logger.warning(f"Unexpected fault status type received: {type(fault)}, value: {fault}")
 
 if __name__ == '__main__':
     # Basic test usage
