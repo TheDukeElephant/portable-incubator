@@ -94,8 +94,11 @@ class MAX31865:
 
         temperature = None # Initialize temperature
         try:
+            # Read resistance first for debugging
+            resistance = self.sensor.rtd_resistance
+            logger.info(f"Raw RTD resistance reading: {resistance} Ohms") # Changed to INFO for visibility
             temperature = self.sensor.temperature
-            logger.debug(f"Raw temperature reading: {temperature}°C")
+            logger.debug(f"Calculated temperature reading: {temperature}°C")
             # NOTE: Fault check moved to finally block
         except RuntimeError as e:
             logger.error(f"Failed to read temperature from MAX31865 (RuntimeError): {e}")
