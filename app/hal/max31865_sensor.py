@@ -92,30 +92,38 @@ class MAX31865:
             logger.warning("MAX31865 sensor not initialized. Cannot read temperature.")
             return None
 
+        temperature = None # Initialize temperature
         try:
             temperature = self.sensor.temperature
-            # The library might return NaN for fault conditions, check for it.
-            # However, the library usually raises RuntimeError for faults.
-            # For robustness, we can add a check if needed, but typically faults are exceptions.
-            # if temperature != temperature: # Check for NaN
-            #     logger.warning("Sensor reported NaN, possibly a fault condition.")
-            #     self._handle_fault()
-            #     return None
             logger.debug(f"Raw temperature reading: {temperature}°C")
-            return temperature
+            # NOTE: Fault check moved to finally block
         except RuntimeError as e:
-            logger.error(f"Failed to read temperature from MAX31865: {e}")
-            self._handle_fault()
-            return None
+            logger.error(f"Failed to read temperature from MAX31865 (RuntimeError): {e}")
+            # Fault check happens in finally
+            return None # Return None on exception
         except Exception as e:
             logger.error(f"An unexpected error occurred while reading temperature: {e}")
-            return None
+            # Fault check happens in finally
+            return None # Return None on exception
+        finally:
+            # Always check fault status after a read attempt
+            self._handle_fault()
+
+        # Check if the reading itself indicates a fault (like -242)
+        # This threshold might need adjustment, but -240 is a common fault indicator
+        if temperature is not None and temperature < -240:
+             logger.warning(f"Temperature reading ({temperature}°C) indicates a potential fault, even if no exception was raised.")
+             # We already called _handle_fault in finally, so specific fault should be logged if detectable
+
+        return temperature # Return the potentially faulty temperature or None if exception occurred
 
     def _handle_fault(self):
         """
         Checks and logs any fault conditions reported by the sensor.
         """
+        logger.debug("Entering _handle_fault()...") # Add entry log
         if self.sensor is None:
+            logger.debug("_handle_fault: Sensor object is None.")
             return
 
         # Try accessing fault via property instead of method for v2.2.20
