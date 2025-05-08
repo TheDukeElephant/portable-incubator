@@ -94,18 +94,16 @@ class ControlManager:
         print("  Initializing MAX31865 sensor...")
         self.max31865_sensor = None # Default to None
         try:
-            spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-            # Assuming CS pin is GPIO8 (D8 for Blinka)
-            # You might need to adjust board.D8 if your CS pin is different
-            cs_pin = digitalio.DigitalInOut(board.D8) # GPIO8
-            self.max31865_sensor = MAX31865(spi, cs_pin)
-            print("  MAX31865 sensor initialized successfully.")
-        except (ValueError, RuntimeError) as e:
-            self._logger.warning(f"MAX31865 sensor not detected or failed to initialize: {e}. Temperature control will be degraded.")
-            print(f"  Warning: MAX31865 sensor not detected or failed to initialize: {e}. Temperature control will be degraded.")
-        except Exception as e: # Catch any other potential exceptions from the sensor library
-            self._logger.warning(f"An unexpected error occurred during MAX31865 initialization: {e}. Temperature control will be degraded.")
-            print(f"  Warning: An unexpected error occurred during MAX31865 initialization: {e}. Temperature control will be degraded.")
+            # Our HAL MAX31865 class handles SPI and CS pin setup internally.
+            # We just need to provide the CS pin (board.D8 is GPIO8) and the number of wires.
+            self.max31865_sensor = MAX31865(cs_pin=board.D8, wires=2) # Specify 2-wire
+            # The HAL class will log its own success/failure.
+            # If an exception is raised by HAL's __init__, it will be caught below.
+            print("  Attempted MAX31865 sensor HAL initialization.")
+        except Exception as e: # Catch exceptions from our HAL's __init__
+            self._logger.warning(f"Failed to initialize MAX31865 HAL: {e}. Temperature control will be degraded.")
+            print(f"  Warning: Failed to initialize MAX31865 HAL: {e}. Temperature control will be degraded.")
+            self.max31865_sensor = None # Ensure it's None on failure
 
         # self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # O2Loop will instantiate its own sensor
         # Use the CO2_SENSOR_PORT constant defined above
