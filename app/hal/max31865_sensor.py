@@ -34,6 +34,12 @@ class MAX31865:
             logger.info(f"Type of spi object: {type(spi)}")
             logger.info(f"Attributes of spi object: {dir(spi)}") # Log all attributes
             
+            # --- Monkey-patch for 'id' attribute ---
+            if not hasattr(spi, 'id'):
+                logger.info("Monkey-patching SPI object with an 'id' attribute (set to 0).")
+                spi.id = 0
+            # --- End monkey-patch ---
+            
             cs = digitalio.DigitalInOut(cs_pin)  # Chip select
             cs.direction = digitalio.Direction.OUTPUT
             cs.value = True # Deselect
