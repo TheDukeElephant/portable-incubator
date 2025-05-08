@@ -65,9 +65,9 @@ class MAX31865:
             # Explicitly set nominal resistance (usually 100 for PT100)
             logger.info(f"Setting sensor nominal RTD resistance to: {rtd_nominal_resistance}")
             self.sensor.rtd_nominal_resistance = rtd_nominal_resistance
-            # Assuming library defaults ref_resistance=430 for now.
-            # If R_REF is different, add: self.sensor.ref_resistance = ref_resistance
-            # self.sensor.ref_resistance = ref_resistance
+            # Explicitly set reference resistance
+            logger.info(f"Setting sensor reference resistance to: {ref_resistance}")
+            self.sensor.ref_resistance = ref_resistance
 
             # Test sensor communication immediately after configuration
             _ = self.sensor.temperature # Try a benign read
@@ -123,8 +123,11 @@ class MAX31865:
         """
         logger.debug("Entering _handle_fault()...") # Add entry log
         if self.sensor is None:
-            logger.debug("_handle_fault: Sensor object is None.")
+            logger.warning("_handle_fault: Attempted to handle fault, but self.sensor is None.") # Changed to WARNING
             return
+        else:
+            # Add check for sensor object state before trying to access .fault
+            logger.debug(f"_handle_fault: self.sensor object is: {self.sensor}")
 
         # Try accessing fault via property instead of method for v2.2.20
         try:
