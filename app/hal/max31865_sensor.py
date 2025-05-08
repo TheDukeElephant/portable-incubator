@@ -29,17 +29,22 @@ class MAX31865:
             miso_pin = board.MISO # Or board.D9
             
             logger.debug(f"Attempting SPI with SCK: {sck_pin}, MOSI: {mosi_pin}, MISO: {miso_pin}")
+            
+            # --- Monkey-patch busio.SPI class itself (for diagnostics) ---
+            if not hasattr(busio.SPI, 'id'):
+                logger.info("Attempting to monkey-patch busio.SPI CLASS with an 'id' attribute (set to 0).")
+                busio.SPI.id = 0
+            # --- End class monkey-patch ---
+
             spi = busio.SPI(sck_pin, MOSI=mosi_pin, MISO=miso_pin)
             logger.info(f"busio.SPI object created: {spi}") # Log the object itself
             logger.info(f"Type of spi object: {type(spi)}")
             logger.info(f"Attributes of spi object: {dir(spi)}") # Log all attributes
-            
-            # --- Monkey-patch for 'id' attribute ---
-            if not hasattr(spi, 'id'):
-                logger.info("Monkey-patching SPI object with an 'id' attribute (set to 0) using setattr().")
-                setattr(spi, 'id', 0) # Use setattr
-            # --- End monkey-patch ---
-            
+            if hasattr(spi, 'id'):
+                logger.info(f"SPI object now has id: {spi.id}")
+            else:
+                logger.warning("SPI object still does not have id after class patch and instantiation.")
+
             cs = digitalio.DigitalInOut(cs_pin)  # Chip select
             cs.direction = digitalio.Direction.OUTPUT
             cs.value = True # Deselect
