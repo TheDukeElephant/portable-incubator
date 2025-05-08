@@ -3,6 +3,7 @@ import busio
 import digitalio
 import adafruit_max31865
 import logging
+import time # <-- Add missing import
 
 logger = logging.getLogger(__name__)
 
@@ -10,106 +11,55 @@ class MAX31865:
     """
     Hardware Abstraction Layer for the MAX31865 PT100/PT1000 RTD Sensor Amplifier.
     """
-    def __init__(self, cs_pin=board.D8, rtd_nominal_resistance=100.0, ref_resistance=430.0, wires=2):
+    # Default values match the working example script
+    def __init__(self, cs_pin=board.D5, rtd_nominal_resistance=100.0, ref_resistance=430.0, wires=2):
         """
-        Initializes the MAX31865 sensor.
+        Initializes the MAX31865 sensor based on the working example script.
 
         Args:
-            cs_pin: The board pin for the chip select (CS) line. Defaults to board.D8 (GPIO8).
+            cs_pin: The board pin for the chip select (CS) line. Defaults to board.D5 (GPIO5).
             rtd_nominal_resistance: The nominal resistance of the RTD sensor (e.g., 100.0 for PT100).
             ref_resistance: The reference resistor value on the MAX31865 board.
             wires: The number of wires for the RTD sensor (2, 3, or 4).
         """
         self.sensor = None
+        self._rtd_nominal_resistance = rtd_nominal_resistance # Store for reference
+        self._ref_resistance = ref_resistance # Store for reference
+        self._wires = wires # Store for reference
+
         try:
-            # SPI setup
-            # Try with explicit pin objects for SCK, MOSI, MISO
-            sck_pin = board.SCK # Or board.D11
-            mosi_pin = board.MOSI # Or board.D10
-            miso_pin = board.MISO # Or board.D9
-            
+            # SPI setup (Standard Blinka way)
+            sck_pin = board.SCK
+            mosi_pin = board.MOSI
+            miso_pin = board.MISO
             logger.debug(f"Attempting SPI with SCK: {sck_pin}, MOSI: {mosi_pin}, MISO: {miso_pin}")
-            
-            # --- Monkey-patch busio.SPI class itself (for diagnostics) ---
-            if not hasattr(busio.SPI, 'id'):
-                logger.info("Attempting to monkey-patch busio.SPI CLASS with an 'id' attribute (set to 0).")
-                busio.SPI.id = 0
-            # --- End class monkey-patch ---
-
             spi = busio.SPI(sck_pin, MOSI=mosi_pin, MISO=miso_pin)
-            logger.info(f"busio.SPI object created: {spi}") # Log the object itself
-            logger.info(f"Type of spi object: {type(spi)}")
-            logger.info(f"Attributes of spi object: {dir(spi)}") # Log all attributes
-            if hasattr(spi, 'id'):
-                logger.info(f"SPI object now has id: {spi.id}")
-            else:
-                logger.warning("SPI object still does not have id after class patch and instantiation.")
+            logger.info(f"busio.SPI object created: {spi}")
 
-            cs = digitalio.DigitalInOut(cs_pin)  # Chip select
+            # CS Pin setup
+            cs = digitalio.DigitalInOut(cs_pin)
             cs.direction = digitalio.Direction.OUTPUT
             cs.value = True # Deselect
 
-            # Verify monkey-patch right before use
-            if hasattr(spi, 'id'):
-                logger.info(f"CONFIRMED: spi object HAS 'id' attribute ({spi.id=}) before passing to MAX31865 constructor.")
-            else:
-                logger.error("CRITICAL: spi object DOES NOT HAVE 'id' attribute immediately before passing to MAX31865 constructor.")
+            # Initialize using keyword arguments from the working example
+            # Note: Using 'rtd_nominal' and 'ref_resistor' as per example
+            self.sensor = adafruit_max31865.MAX31865(
+                spi,
+                cs,
+                wires=self._wires, # Use stored value
+                rtd_nominal=self._rtd_nominal_resistance, # Use stored value
+                ref_resistor=self._ref_resistance      # Use stored value
+            )
+            logger.info(f"MAX31865 sensor initialized on CS pin {cs_pin} with wires={self._wires}, rtd_nominal={self._rtd_nominal_resistance}, ref_resistor={self._ref_resistance}")
 
-            # Call constructor with only spi and cs (as per TypeError for v2.2.20)
-            self.sensor = adafruit_max31865.MAX31865(spi, cs)
-            logger.info(f"Adafruit MAX31865 object created for CS pin {cs_pin} using SPI bus: {spi}")
+            # Optional: Test read after init
+            _ = self.sensor.temperature
+            logger.info("Initial temperature read successful after initialization.")
 
-            # Configure properties AFTER initialization for v2.2.20
-            logger.info(f"Setting sensor wires to: {wires}")
-            self.sensor.wires = wires
-            # Explicitly set nominal resistance (usually 100 for PT100)
-            logger.info(f"Setting sensor nominal RTD resistance to: {rtd_nominal_resistance}")
-            self.sensor.rtd_nominal_resistance = rtd_nominal_resistance
-            # Explicitly set reference resistance
-            logger.info(f"Setting sensor reference resistance to: {ref_resistance}")
-            self.sensor.ref_resistance = ref_resistance
-
-            # Clear any existing faults before first read
-            try:
-                self.sensor.clear_faults()
-                logger.info("Cleared any existing faults during initialization")
-            except AttributeError:
-                logger.warning("Could not clear faults - method not available")
-            except Exception as e:
-                logger.warning(f"Error clearing faults: {e}")
-
-            # Test sensor communication immediately after configuration
-            try:
-                temp = self.sensor.temperature # Try a benign read
-                logger.info(f"Initial temperature reading: {temp}°C")
-                if temp < -240:
-                    logger.warning("Initial temperature reading indicates a fault condition")
-                    self._handle_fault()  # Check for specific faults
-                    logger.info("Checking RTD resistance value...")
-                    try:
-                        rtd = self.sensor.rtd
-                        logger.info(f"RTD resistance value: {rtd} ohms")
-                        # For PT100, resistance should be ~100 ohms at 0°C
-                        # If it's 0 or very low, there's likely a connection issue
-                        if rtd < 10:
-                            logger.error("RTD resistance is too low - check sensor connection")
-                        elif rtd > 400:
-                            logger.error("RTD resistance is too high - check sensor connection")
-                    except Exception as e:
-                        logger.error(f"Could not read RTD resistance: {e}")
-                else:
-                    logger.info("MAX31865 sensor communication successful after initialization and configuration.")
-            except Exception as e:
-                logger.error(f"Error during initial temperature read: {e}")
-                self._handle_fault()  # Check for specific faults
-        except AttributeError as e: # Specifically catch AttributeError like 'SPI' object has no attribute 'id'
-            logger.error(f"Failed to initialize MAX31865 sensor (AttributeError): {e}")
-            self.sensor = None
-            raise # Re-raise
-        except Exception as e: # Catch other potential errors during init
+        except Exception as e: # Catch any potential errors during init
             logger.error(f"An unexpected error occurred during MAX31865 initialization ({e.__class__.__name__}): {e}")
             self.sensor = None
-            raise # Re-raise
+            # Do not re-raise here, allow manager to handle None sensor object
 
     def read_temperature(self):
         """
@@ -124,83 +74,54 @@ class MAX31865:
 
         temperature = None # Initialize temperature
         try:
-            # Read temperature directly
             temperature = self.sensor.temperature
             logger.debug(f"Raw temperature reading: {temperature}°C")
-            # NOTE: Fault check moved to finally block
         except RuntimeError as e:
             logger.error(f"Failed to read temperature from MAX31865 (RuntimeError): {e}")
-            # Fault check happens in finally
+            self._handle_fault() # Check for specific faults on RuntimeError
             return None # Return None on exception
         except Exception as e:
             logger.error(f"An unexpected error occurred while reading temperature: {e}")
-            # Fault check happens in finally
             return None # Return None on exception
         finally:
-            # Always check fault status after a read attempt
-            self._handle_fault()
+            # Optionally check fault status even if no exception occurred
+            # self._handle_fault() # Can be noisy if called every time
+            pass
 
         # Check if the reading itself indicates a fault (like -242)
-        # This threshold might need adjustment, but -240 is a common fault indicator
         if temperature is not None and temperature < -240:
-             logger.warning(f"Temperature reading ({temperature}°C) indicates a potential fault, even if no exception was raised.")
-             # We already called _handle_fault in finally, so specific fault should be logged if detectable
+             logger.warning(f"Temperature reading ({temperature}°C) indicates a potential fault.")
+             self._handle_fault() # Check for specific faults if reading is bad
 
-        return temperature # Return the potentially faulty temperature or None if exception occurred
+        return temperature
 
     def _handle_fault(self):
         """
         Checks and logs any fault conditions reported by the sensor.
+        Uses properties/methods compatible with recent library versions.
         """
-        logger.debug("Entering _handle_fault()...") # Add entry log
+        logger.debug("Entering _handle_fault()...")
         if self.sensor is None:
-            logger.warning("_handle_fault: Attempted to handle fault, but self.sensor is None.") # Changed to WARNING
+            logger.warning("_handle_fault: Attempted to handle fault, but self.sensor is None.")
             return
-        else:
-            # Add check for sensor object state before trying to access .fault
-            logger.debug(f"_handle_fault: self.sensor object is: {self.sensor}")
 
-        # Try accessing fault via property instead of method for v2.2.20
         try:
-            fault = self.sensor.fault
-            logger.debug(f"Read fault register value: {fault}")
-        except AttributeError:
-             logger.error("Could not read fault status: 'sensor.fault' attribute does not exist.")
-             return # Cannot proceed if fault status unavailable
-        except Exception as e:
-             logger.error(f"Error reading fault status: {e}")
-             return
+            # Use the fault property (returns tuple in recent versions)
+            fault_tuple = self.sensor.fault
+            logger.debug(f"Read fault tuple: {fault_tuple}")
 
-        # Check if any element in the fault tuple is True
-        if isinstance(fault, tuple) and any(fault):
-            logger.warning(f"MAX31865 Fault detected (Tuple: {fault})!")
-            try:
-                # Check individual tuple elements based on assumed order
-                if fault[0]: 
-                    logger.warning("MAX31865 Fault: RTD High Threshold - Check for short circuit or incorrect wiring")
-                if fault[1]: 
-                    logger.warning("MAX31865 Fault: RTD Low Threshold - Check for open circuit or disconnected sensor")
-                if fault[2]: 
-                    logger.warning("MAX31865 Fault: REFIN- > 0.85 x VBIAS - Check reference resistor")
-                if fault[3]: 
-                    logger.warning("MAX31865 Fault: REFIN- < 0.85 x VBIAS (FORCE- open) - Check for open circuit")
-                if fault[4]: 
-                    logger.warning("MAX31865 Fault: RTDIN- < 0.85 x VBIAS (FORCE- open) - Check for open circuit")
-                if fault[5]: 
-                    logger.warning("MAX31865 Fault: Overvoltage/undervoltage - Check power supply")
-                
-                # Try to read RTD resistance for additional diagnostics
-                try:
-                    rtd = self.sensor.rtd
-                    logger.info(f"Current RTD resistance: {rtd} ohms")
-                    if rtd < 10:
-                        logger.error("RTD resistance is too low - likely a short circuit")
-                    elif rtd > 400:
-                        logger.error("RTD resistance is too high - likely an open circuit")
-                except Exception as e:
-                    logger.error(f"Could not read RTD resistance: {e}")
-                
-                # Try to clear faults - this might fail if method name changed
+            if isinstance(fault_tuple, tuple) and any(fault_tuple):
+                logger.warning(f"MAX31865 Fault detected (Tuple: {fault_tuple})!")
+                fault_map = [
+                    "RTD High Threshold", "RTD Low Threshold",
+                    "REFIN- > 0.85 x VBIAS", "REFIN- < 0.85 x VBIAS (FORCE- open)",
+                    "RTDIN- < 0.85 x VBIAS (FORCE- open)", "Overvoltage/undervoltage"
+                ]
+                for i, fault_active in enumerate(fault_tuple):
+                    if fault_active and i < len(fault_map):
+                        logger.warning(f"MAX31865 Fault: {fault_map[i]}")
+
+                # Try to clear faults
                 try:
                     self.sensor.clear_faults()
                     logger.debug("Attempted to clear MAX31865 faults.")
@@ -208,123 +129,34 @@ class MAX31865:
                     logger.warning("'sensor.clear_faults()' method not found for this library version.")
                 except Exception as e:
                     logger.error(f"Error calling clear_faults(): {e}")
-            except IndexError:
-                 logger.error(f"Fault tuple has unexpected length: {len(fault)}")
-            except Exception as e:
-                 logger.error(f"Error decoding fault tuple: {e}")
-        elif isinstance(fault, tuple):
-            logger.debug("No specific fault flags set in fault tuple.")
-        else:
-            # If fault is not a tuple (e.g., None or unexpected type)
-             logger.warning(f"Unexpected fault status type received: {type(fault)}, value: {fault}")
-
-    def diagnose(self):
-        """
-        Run diagnostics on the MAX31865 sensor and return detailed information.
-        This can be called to help troubleshoot connection issues.
-        """
-        if self.sensor is None:
-            logger.error("Cannot diagnose - sensor not initialized")
-            return "Sensor not initialized"
-        
-        results = []
-        results.append(f"MAX31865 Diagnostics:")
-        
-        # Check temperature reading
-        try:
-            temp = self.sensor.temperature
-            results.append(f"Temperature reading: {temp}°C")
-            if temp < -240:
-                results.append("WARNING: Temperature reading indicates a fault condition")
-        except Exception as e:
-            results.append(f"Error reading temperature: {e}")
-        
-        # Check RTD resistance
-        try:
-            rtd = self.sensor.rtd
-            results.append(f"RTD resistance: {rtd} ohms")
-            # For PT100, resistance should be ~100 ohms at 0°C, ~138.5 ohms at 100°C
-            if rtd < 10:
-                results.append("ERROR: RTD resistance is too low - likely a short circuit")
-            elif rtd > 400:
-                results.append("ERROR: RTD resistance is too high - likely an open circuit")
-            elif 90 <= rtd <= 150:
-                results.append("RTD resistance is in expected range for PT100")
+            elif isinstance(fault_tuple, tuple):
+                logger.debug("No specific fault flags set in fault tuple.")
             else:
-                results.append("WARNING: RTD resistance is outside typical PT100 range")
-        except Exception as e:
-            results.append(f"Error reading RTD resistance: {e}")
-        
-        # Check configuration
-        try:
-            results.append(f"Wires configuration: {self.sensor.wires}")
-            results.append(f"RTD nominal resistance: {self.sensor.rtd_nominal_resistance}")
-            results.append(f"Reference resistance: {self.sensor.ref_resistance}")
-        except Exception as e:
-            results.append(f"Error reading configuration: {e}")
-        
-        # Check for faults
-        try:
-            fault = self.sensor.fault
-            results.append(f"Fault register: {fault}")
-            if isinstance(fault, tuple) and any(fault):
-                if fault[0]: results.append("Fault: RTD High Threshold - Check for short circuit")
-                if fault[1]: results.append("Fault: RTD Low Threshold - Check for open circuit")
-                if fault[2]: results.append("Fault: REFIN- > 0.85 x VBIAS - Check reference resistor")
-                if fault[3]: results.append("Fault: REFIN- < 0.85 x VBIAS (FORCE- open)")
-                if fault[4]: results.append("Fault: RTDIN- < 0.85 x VBIAS (FORCE- open)")
-                if fault[5]: results.append("Fault: Overvoltage/undervoltage")
-        except Exception as e:
-            results.append(f"Error reading fault status: {e}")
-        
-        # Log all results
-        for line in results:
-            logger.info(line)
-        
-        return "\n".join(results)
+                logger.warning(f"Unexpected fault status type received: {type(fault_tuple)}, value: {fault_tuple}")
 
+        except AttributeError:
+             logger.error("Could not read fault status: 'sensor.fault' attribute does not exist.")
+        except Exception as e:
+             logger.error(f"Error reading fault status: {e}")
+
+# Basic test usage (if run directly)
 if __name__ == '__main__':
-    # Basic test usage
     logging.basicConfig(level=logging.INFO)
-    # Ensure SPI is enabled on your Raspberry Pi:
-    # sudo raspi-config -> Interface Options -> SPI -> Yes
-    #
-    # Connections for MAX31865:
-    # Vin -> 3V3 or 5V (check board)
-    # GND -> GND
-    # SCLK -> GPIO11 (Physical Pin 23)
-    # MISO -> GPIO9 (Physical Pin 21)
-    # MOSI -> GPIO10 (Physical Pin 19)
-    # CS   -> GPIO8 (Physical Pin 24) - Default for this class
-    #
-    # For PT100 RTD (3-wire example):
-    # F+ and RTD+ connected together to one wire of RTD
-    # F- to second wire of RTD
-    # RTD- to third wire of RTD (often the common wire or different color)
+    print("Running basic MAX31865 HAL test...")
+    # Use GPIO5 (board.D5) as per the working example
+    test_sensor = MAX31865(cs_pin=board.D5, wires=2, rtd_nominal_resistance=100.0, ref_resistance=430.0)
 
-    sensor = MAX31865(cs_pin=board.D8, wires=3) # GPIO8 is board.D8
-
-    if sensor.sensor: # Check if sensor was initialized successfully
+    if test_sensor.sensor:
+        print("Sensor initialized. Reading temperature...")
         try:
             while True:
-                temp = sensor.read_temperature()
+                temp = test_sensor.read_temperature()
                 if temp is not None:
-                    logger.info(f"Temperature: {temp:.2f}°C")
+                    print(f"Temperature: {temp:.2f}°C")
                 else:
-                    logger.warning("Failed to read temperature or sensor fault.")
-                
-                # Check for faults explicitly if needed, though read_temperature handles some
-                # sensor._handle_fault() 
-                
-                # Wait a bit before reading again
-                import time
+                    print("Failed to read temperature or sensor fault.")
                 time.sleep(2.0)
         except KeyboardInterrupt:
-            logger.info("Exiting test script.")
-        finally:
-            # Cleanup (if any specific cleanup is needed for SPI or digitalio)
-            # spi.deinit() # If spi was created here and not managed by Blinka globally
-            # cs.deinit()
-            pass
+            print("Exiting test.")
     else:
-        logger.error("MAX31865 sensor could not be initialized. Please check logs and setup.")
+        print("MAX31865 sensor could not be initialized. Please check logs and setup.")

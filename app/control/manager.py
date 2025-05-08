@@ -94,12 +94,19 @@ class ControlManager:
         print("  Initializing MAX31865 sensor...")
         self.max31865_sensor = None # Default to None
         try:
-            # Our HAL MAX31865 class handles SPI and CS pin setup internally.
-            # We just need to provide the CS pin (board.D8 is GPIO8) and the number of wires.
-            self.max31865_sensor = MAX31865(cs_pin=board.D8, wires=2) # Specify 2-wire
+            # Initialize HAL using parameters from the working example
+            # CS Pin = D5 (GPIO5)
+            # Wires = 2
+            # RTD Nominal = 100.0
+            # Ref Resistor = 430.0
+            self.max31865_sensor = MAX31865(
+                cs_pin=board.D5,
+                wires=2,
+                rtd_nominal_resistance=100.0,
+                ref_resistance=430.0
+            )
             # The HAL class will log its own success/failure.
-            # If an exception is raised by HAL's __init__, it will be caught below.
-            print("  Attempted MAX31865 sensor HAL initialization.")
+            print("  Attempted MAX31865 sensor HAL initialization (using GPIO5).")
         except Exception as e: # Catch exceptions from our HAL's __init__
             self._logger.warning(f"Failed to initialize MAX31865 HAL: {e}. Temperature control will be degraded.")
             print(f"  Warning: Failed to initialize MAX31865 HAL: {e}. Temperature control will be degraded.")
