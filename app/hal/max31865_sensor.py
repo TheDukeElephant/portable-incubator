@@ -62,9 +62,11 @@ class MAX31865:
             # Configure properties AFTER initialization for v2.2.20
             logger.info(f"Setting sensor wires to: {wires}")
             self.sensor.wires = wires
-            # Assuming library defaults rtd_nominal=100, ref_resistance=430 for now.
-            # If needed, add:
-            # self.sensor.rtd_nominal_resistance = rtd_nominal_resistance
+            # Explicitly set nominal resistance (usually 100 for PT100)
+            logger.info(f"Setting sensor nominal RTD resistance to: {rtd_nominal_resistance}")
+            self.sensor.rtd_nominal_resistance = rtd_nominal_resistance
+            # Assuming library defaults ref_resistance=430 for now.
+            # If R_REF is different, add: self.sensor.ref_resistance = ref_resistance
             # self.sensor.ref_resistance = ref_resistance
 
             # Test sensor communication immediately after configuration
