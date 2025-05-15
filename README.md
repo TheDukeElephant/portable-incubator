@@ -78,7 +78,7 @@ The system follows a layered architecture:
 | O2 Sensor                     | I2C       | 2 (SDA), 3 (SCL)    | Standard I2C pins                         |
 | CO2 Sensor (e.g., SprintIR)   | UART      | 14 (TXD), 15 (RXD)  | Serial Port (e.g., `/dev/ttyS0`)          |
 | DHT22 Sensor (Temp/Humidity)  | Digital   | 4                   |                                           |
-| PT100 Temp Sensor (MAX31865)  | SPI       | 11 (SCLK), 10 (MOSI), 9 (MISO), **5 (CS)** | SPI0, CS is GPIO5 (CE1 not default CE0) |
+| PT100 Temp Sensors (2x MAX31865) | SPI       | SCLK: GPIO11, MOSI: GPIO10, MISO: GPIO9, CS0: GPIO8, CS1: GPIO7 | SPI0, Chip Selects on GPIO8 (CE0) & GPIO7 (CE1) |
 | **Actuators (Relays)**        |           |                     |                                           |
 | Heater Relay                  | Digital   | 17                  | Controls heating element                  |
 | Humidifier Relay              | Digital   | 27                  | Controls humidifier                       |
@@ -87,18 +87,24 @@ The system follows a layered architecture:
 | Secondary CO2 Solenoid Relay  | Digital   | 12                  | Fine-tune/redundant CO2 injection         |
 | Argon Valve Relay             | Digital   | 23                  | Controls Argon release for O2 displacement|
 
-### PT100 Temperature Sensor (MAX31865)
+### PT100 Temperature Sensors (Dual MAX31865 Setup)
 
 The system now utilizes a PT100 RTD temperature sensor connected via a MAX31865 RTD-to-Digital converter for precise temperature measurements.
 
-#### MAX31865 to Raspberry Pi Wiring:
+#### MAX31865 to Raspberry Pi Wiring (Dual Sensor Setup):
 
-*   **SCLK (Serial Clock):** RPi Physical Pin 23 (BCM GPIO11 / SPI0_SCLK)
-*   **MOSI (Master Out Slave In) / SDI:** RPi Physical Pin 19 (BCM GPIO10 / SPI0_MOSI)
-*   **MISO (Master In Slave Out) / SDO:** RPi Physical Pin 21 (BCM GPIO9 / SPI0_MISO)
-*   **CS (Chip Select):** RPi Physical Pin 22 (BCM GPIO5 / SPI0_CE1_N) - **Note: Configured to GPIO5 (CE1) in `manager.py`, not the default CE0 (GPIO8).**
-*   **VIN:** RPi Pin 1 (3.3V PWR)
-*   **GND:** RPi Pin 6 (GND)
+For connecting two MAX31865 PT100 temperature sensors:
+
+*   **Shared SPI Pins (Common to both sensors):**
+    *   **SCLK (Serial Clock):** Connect to RPi Physical Pin 23 (BCM GPIO11 / SPI0_SCLK).
+    *   **MOSI (Master Out Slave In) / SDI:** Connect to RPi Physical Pin 19 (BCM GPIO10 / SPI0_MOSI).
+    *   **MISO (Master In Slave Out) / SDO:** Connect to RPi Physical Pin 21 (BCM GPIO9 / SPI0_MISO).
+*   **Unique Chip Select (CS) Pins:**
+    *   **Sensor 1 CS (CS0):** Connect to RPi Physical Pin 24 (BCM GPIO8 / SPI0_CE0_N).
+    *   **Sensor 2 CS (CS1):** Connect to RPi Physical Pin 26 (BCM GPIO7 / SPI0_CE1_N).
+*   **Power and Ground (For each sensor):**
+    *   **VIN/VCC:** Connect to RPi 3.3V PWR (e.g., Physical Pin 1 or 17).
+    *   **GND:** Connect to RPi GND (e.g., Physical Pin 6, 9, 14, 20, 25, 30, 34, or 39).
 
 **Note on PT100 Connection:** The PT100 sensor connects to the MAX31865 board. Depending on your specific MAX31865 board and PT100 sensor, you can use 2-wire, 3-wire, or 4-wire configurations. Always consult the datasheet for your MAX31865 board for correct wiring.
 
