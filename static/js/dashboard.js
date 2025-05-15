@@ -10,7 +10,8 @@ const MAX_DATA_POINTS = 50; // Approx 50 seconds if data comes every second
 // Chart instances and data storage
 let tempChart, humChart, o2Chart, co2Chart;
 const chartData = {
-    temperature: { labels: [], values: [] },
+    temperature_sensor1: { labels: [], values: [] },
+    temperature_sensor2: { labels: [], values: [] },
     humidity: { labels: [], values: [] },
     o2: { labels: [], values: [] },
     co2: { labels: [], values: [] }
@@ -111,8 +112,33 @@ function initCharts() {
 
     tempChart = new Chart(document.getElementById('temp-chart').getContext('2d'), {
         type: 'line',
-        data: { labels: chartData.temperature.labels, datasets: [{ data: chartData.temperature.values, borderColor: '#FFA500', tension: 0.1, pointRadius: 0 }] },
-        options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: '°C' } } } }
+        data: {
+            labels: [], // Initialize with empty labels, will be populated by the first sensor's data
+            datasets: [
+                {
+                    label: 'Sensor 1',
+                    data: chartData.temperature_sensor1.values,
+                    borderColor: '#FFA500', // Orange
+                    tension: 0.1,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Sensor 2',
+                    data: chartData.temperature_sensor2.values,
+                    borderColor: '#FF6384', // Pink
+                    tension: 0.1,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            ...commonOptions,
+            plugins: { // Ensure legend is displayed for multi-series chart
+                ...commonOptions.plugins,
+                legend: { display: true }
+            },
+            scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: '°C' } } }
+        }
     });
     humChart = new Chart(document.getElementById('hum-chart').getContext('2d'), {
         type: 'line',
@@ -137,40 +163,66 @@ function updateUI(data) {
     const now = new Date(); // Use a single timestamp for all values in this update
 
     // Helper function to update chart data arrays
-    const updateChartData = (key, value) => {
-        if (value === null || value === undefined) return; // Don't add nulls to chart
+    const updateChartData = (key, value, timestamp) => {
+        if (value === null || value === undefined) { // Allow 0 but not null/undefined
+            // For multi-series charts, we might want to push null to keep data points aligned
+            // if one sensor provides data and the other doesn't for a given timestamp.
+            // However, for simplicity here, we'll just skip if value is strictly null/undefined.
+            // If you need to show gaps, you'd push `null` to `values` and the `timestamp` to `labels`.
+            return;
+        }
 
-        chartData[key].labels.push(now);
         chartData[key].values.push(value);
+        // Labels are shared for the temperature chart, so only push if it's the primary series or handle separately
+        if (key === 'temperature_sensor1') { // Assuming sensor 1 dictates the labels
+            chartData[key].labels.push(timestamp);
+             if (chartData[key].labels.length > MAX_DATA_POINTS) {
+                chartData[key].labels.shift();
+            }
+        }
 
-        // Keep only the last MAX_DATA_POINTS
-        if (chartData[key].labels.length > MAX_DATA_POINTS) {
-            chartData[key].labels.shift();
+
+        // Keep only the last MAX_DATA_POINTS for values
+        if (chartData[key].values.length > MAX_DATA_POINTS) {
             chartData[key].values.shift();
         }
     };
 
-    // Temperature
-    let tempDisplay = '--'; // Default fallback
-    if (data.temperature === "NC") {
-        tempDisplay = "NC";
-    } else if (typeof data.temperature === 'number') {
-        tempDisplay = data.temperature.toFixed(2);
+    // Temperature Sensor 1
+    let tempDisplay1 = '--';
+    if (data.temperature_sensor1 === "NC") {
+        tempDisplay1 = "NC";
+    } else if (typeof data.temperature_sensor1 === 'number') {
+        tempDisplay1 = data.temperature_sensor1.toFixed(2);
     }
-    document.getElementById('temp-current').textContent = tempDisplay;
+    document.getElementById('temp-current-1').textContent = tempDisplay1;
+    updateChartData('temperature_sensor1', data.temperature_sensor1, now);
+
+    // Temperature Sensor 2
+    let tempDisplay2 = '--';
+    if (data.temperature_sensor2 === "NC") {
+        tempDisplay2 = "NC";
+    } else if (typeof data.temperature_sensor2 === 'number') {
+        tempDisplay2 = data.temperature_sensor2.toFixed(2);
+    }
+    document.getElementById('temp-current-2').textContent = tempDisplay2;
+    updateChartData('temperature_sensor2', data.temperature_sensor2, now);
+
+    // Common Temperature Setpoint & Heater Status (assuming these are still singular)
     document.getElementById('temp-setpoint-display').textContent = data.temp_setpoint !== null ? data.temp_setpoint.toFixed(2) : '--';
     updateRelayStatus('heater-status', data.heater_on, 'Heater');
-    // Only update input if it doesn't have focus to avoid disrupting user input
     const tempInput = document.getElementById('temp-setpoint-input');
     if (document.activeElement !== tempInput && data.temp_setpoint !== null) {
          tempInput.value = data.temp_setpoint.toFixed(2);
     }
-    updateChartData('temperature', data.temperature); // Update chart data
-    // Update Temperature Enable Switch state (only if element exists and data is present)
-    // REMOVED: && document.activeElement !== tempEnableSwitch
     if (tempEnableSwitch && data.temperature_enabled !== undefined) {
         console.log(`[LOG] updateUI: Setting tempEnableSwitch.checked = ${data.temperature_enabled}`);
         tempEnableSwitch.checked = data.temperature_enabled;
+    }
+
+    // Update temperature chart labels (driven by sensor 1's labels)
+    if (tempChart) {
+        tempChart.data.labels = chartData.temperature_sensor1.labels;
     }
 
 
@@ -188,7 +240,7 @@ function updateUI(data) {
      if (document.activeElement !== humInput && data.humidity_setpoint !== null) {
          humInput.value = data.humidity_setpoint.toFixed(1);
     }
-    updateChartData('humidity', data.humidity); // Update chart data
+    updateChartData('humidity', data.humidity, now); // Update chart data
     // Update Humidity Enable Switch state
     if (humEnableSwitch && data.humidity_enabled !== undefined /* && document.activeElement !== humEnableSwitch */) { // Removed activeElement check
         console.log(`[LOG] updateUI: Setting humEnableSwitch.checked = ${data.humidity_enabled}`);
@@ -211,7 +263,7 @@ function updateUI(data) {
      if (document.activeElement !== o2Input && data.o2_setpoint !== null) {
          o2Input.value = data.o2_setpoint.toFixed(1);
     }
-    updateChartData('o2', data.o2); // Update chart data
+    updateChartData('o2', data.o2, now); // Update chart data
     // Update O2 Enable Switch state
     if (o2EnableSwitch && data.o2_enabled !== undefined /* && document.activeElement !== o2EnableSwitch */) { // Removed activeElement check
         console.log(`[LOG] updateUI: Setting o2EnableSwitch.checked = ${data.o2_enabled}`);
@@ -232,7 +284,7 @@ function updateUI(data) {
         co2Input.value = co2_setpoint_percentage;
     }
     // Update chart data with the current CO2 percentage to match the Y-axis
-    updateChartData('co2', co2_percentage);
+    updateChartData('co2', co2_percentage, now);
     // Update CO2 Enable Switch state
     if (co2EnableSwitch && data.co2_enabled !== undefined /* && document.activeElement !== co2EnableSwitch */) { // Removed activeElement check
         console.log(`[LOG] updateUI: Setting co2EnableSwitch.checked = ${data.co2_enabled}`);

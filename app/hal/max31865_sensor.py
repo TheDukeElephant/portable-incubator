@@ -139,24 +139,134 @@ class MAX31865:
         except Exception as e:
              logger.error(f"Error reading fault status: {e}")
 
-# Basic test usage (if run directly)
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    print("Running basic MAX31865 HAL test...")
-    # Use GPIO5 (board.D5) as per the working example
-    test_sensor = MAX31865(cs_pin=board.D5, wires=2, rtd_nominal_resistance=100.0, ref_resistance=430.0)
+class MAX31865_Hub:
+    """
+    Manages two MAX31865 sensors, each on a different CS pin.
+    """
+    def __init__(self, cs_pin_1, cs_pin_2, rtd_nominal_resistance=100.0, ref_resistance=430.0, wires=2):
+        """
+        Initializes the MAX31865 Hub with two sensors.
 
-    if test_sensor.sensor:
-        print("Sensor initialized. Reading temperature...")
+        Args:
+            cs_pin_1: The board pin for Chip Select of the first sensor.
+            cs_pin_2: The board pin for Chip Select of the second sensor.
+            rtd_nominal_resistance: Nominal resistance of the RTD (e.g., 100.0 for PT100).
+            ref_resistance: Reference resistor value on the MAX31865 board.
+            wires: Number of wires for the RTD sensor (2, 3, or 4).
+        """
+        logger.info(f"Initializing MAX31865 Hub with CS1: {cs_pin_1}, CS2: {cs_pin_2}")
+        self.sensor1 = MAX31865(
+            cs_pin=cs_pin_1,
+            rtd_nominal_resistance=rtd_nominal_resistance,
+            ref_resistance=ref_resistance,
+            wires=wires
+        )
+        self.sensor2 = MAX31865(
+            cs_pin=cs_pin_2,
+            rtd_nominal_resistance=rtd_nominal_resistance,
+            ref_resistance=ref_resistance,
+            wires=wires
+        )
+
+        if not self.sensor1.sensor:
+            logger.error(f"Failed to initialize MAX31865 Sensor 1 on CS pin {cs_pin_1}.")
+        else:
+            logger.info(f"MAX31865 Sensor 1 initialized on CS pin {cs_pin_1}.")
+
+        if not self.sensor2.sensor:
+            logger.error(f"Failed to initialize MAX31865 Sensor 2 on CS pin {cs_pin_2}.")
+        else:
+            logger.info(f"MAX31865 Sensor 2 initialized on CS pin {cs_pin_2}.")
+
+    def read_temperature_sensor1(self):
+        """Reads temperature from sensor 1."""
+        if self.sensor1 and self.sensor1.sensor:
+            return self.sensor1.read_temperature()
+        logger.warning("Sensor 1 not available or not initialized for temperature reading.")
+        return None
+
+    def read_temperature_sensor2(self):
+        """Reads temperature from sensor 2."""
+        if self.sensor2 and self.sensor2.sensor:
+            return self.sensor2.read_temperature()
+        logger.warning("Sensor 2 not available or not initialized for temperature reading.")
+        return None
+
+    def read_all_temperatures(self):
+        """Reads temperatures from both sensors and returns them as a dictionary."""
+        return {
+            "sensor1": self.read_temperature_sensor1(),
+            "sensor2": self.read_temperature_sensor2()
+        }
+
+# Basic test usage for MAX31865_Hub
+if __name__ == '__main__':
+    # Configure basic logging
+    # For more detailed output, set level to logging.DEBUG
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    logger.info("Running MAX31865_Hub HAL test...")
+
+    # Define CS pins for the two sensors.
+    # These are common SPI Chip Select pins on Raspberry Pi.
+    # SPI0_CE0_N is GPIO8 (physical pin 24), accessible as board.CE0 or board.D8.
+    # SPI0_CE1_N is GPIO7 (physical pin 26), accessible as board.CE1 or board.D7.
+    # Ensure these pins are not in use by other SPI devices if SPI0 is shared.
+    # If these specific pins are unavailable, any other free GPIO pins can be used.
+    # Example: cs_pin_sensor1 = board.D25, cs_pin_sensor2 = board.D24
+    try:
+        cs_pin_sensor1 = board.CE0
+        cs_pin_sensor2 = board.CE1
+        logger.info(f"Using CS Pin 1: {cs_pin_sensor1}, CS Pin 2: {cs_pin_sensor2}")
+    except AttributeError:
+        logger.error("board.CE0 or board.CE1 not defined. Please check your Blinka board definition or choose other GPIOs.")
+        logger.info("Example: cs_pin_sensor1 = board.D5 (GPIO5), cs_pin_sensor2 = board.D6 (GPIO6)")
+        # Fallback for testing if CE0/CE1 are not available (e.g. on non-Pi or different Blinka setup)
+        # Ensure these are valid and free GPIOs on your specific board.
+        cs_pin_sensor1 = board.D5 # A default, ensure it's different for sensor 2
+        cs_pin_sensor2 = board.D6 # A different default, ensure it's free
+
+    # Initialize the hub for two sensors
+    # Common parameters for PT100 sensors:
+    # wires: 2, 3, or 4 (ensure this matches your RTD sensor's wiring)
+    # rtd_nominal_resistance: 100.0 for PT100, 1000.0 for PT1000
+    # ref_resistance: Typically 430.0 for PT100 on Adafruit boards, 4300.0 for PT1000
+    sensor_hub = MAX31865_Hub(
+        cs_pin_1=cs_pin_sensor1,
+        cs_pin_2=cs_pin_sensor2,
+        wires=2,
+        rtd_nominal_resistance=100.0,
+        ref_resistance=430.0
+    )
+
+    # Check if sensors were initialized by inspecting the underlying sensor objects
+    sensor1_initialized = sensor_hub.sensor1 and sensor_hub.sensor1.sensor
+    sensor2_initialized = sensor_hub.sensor2 and sensor_hub.sensor2.sensor
+
+    if sensor1_initialized or sensor2_initialized:
+        logger.info("MAX31865 Hub initialized (at least one sensor). Reading temperatures...")
         try:
-            while True:
-                temp = test_sensor.read_temperature()
-                if temp is not None:
-                    print(f"Temperature: {temp:.2f}°C")
+            for _ in range(5): # Read a few times for testing
+                temps = sensor_hub.read_all_temperatures()
+                temp1 = temps["sensor1"]
+                temp2 = temps["sensor2"]
+
+                if temp1 is not None:
+                    logger.info(f"Sensor 1 Temperature: {temp1:.2f}°C")
                 else:
-                    print("Failed to read temperature or sensor fault.")
+                    logger.warning("Failed to read from Sensor 1 (or sensor fault/not initialized).")
+
+                if temp2 is not None:
+                    logger.info(f"Sensor 2 Temperature: {temp2:.2f}°C")
+                else:
+                    logger.warning("Failed to read from Sensor 2 (or sensor fault/not initialized).")
+                
+                if not sensor1_initialized: logger.info("Sensor 1 was not initialized.")
+                if not sensor2_initialized: logger.info("Sensor 2 was not initialized.")
+
                 time.sleep(2.0)
         except KeyboardInterrupt:
-            print("Exiting test.")
+            logger.info("Exiting hub test due to KeyboardInterrupt.")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during hub test: {e}", exc_info=True)
     else:
-        print("MAX31865 sensor could not be initialized. Please check logs and setup.")
+        logger.error("Neither MAX31865 sensor in the hub could be initialized. Please check wiring, CS pin assignments, and logs.")

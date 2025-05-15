@@ -38,6 +38,8 @@ class DataLogger:
                         CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
                             timestamp REAL PRIMARY KEY,
                             temperature REAL,
+                            temperature_sensor1 REAL,
+                            temperature_sensor2 REAL,
                             humidity REAL,
                             o2 REAL,
                             co2 REAL,
@@ -60,7 +62,8 @@ class DataLogger:
 
         Args:
             data: A dictionary containing the data points. Expected keys:
-                  'temperature', 'humidity', 'o2', 'co2',
+                  'temperature', 'temperature_sensor1', 'temperature_sensor2',
+                  'humidity', 'o2', 'co2',
                   'temp_setpoint', 'humidity_setpoint', 'o2_setpoint', 'co2_setpoint'.
                   Values should be floats or None.
         """
@@ -76,6 +79,8 @@ class DataLogger:
         log_entry = (
             current_timestamp,
             data.get('temperature'),
+            data.get('temperature_sensor1'),
+            data.get('temperature_sensor2'),
             data.get('humidity'),
             data.get('o2'),
             data.get('co2'), # Will be None initially
@@ -87,9 +92,10 @@ class DataLogger:
 
         sql = f"""
             INSERT INTO {TABLE_NAME} (
-                timestamp, temperature, humidity, o2, co2,
+                timestamp, temperature, temperature_sensor1, temperature_sensor2,
+                humidity, o2, co2,
                 temp_setpoint, humidity_setpoint, o2_setpoint, co2_setpoint
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         try:
@@ -161,7 +167,8 @@ class DataLogger:
 
         # Define CSV headers matching the table structure
         headers = [
-            "timestamp", "temperature", "humidity", "o2", "co2",
+            "timestamp", "temperature", "temperature_sensor1", "temperature_sensor2",
+            "humidity", "o2", "co2",
             "temp_setpoint", "humidity_setpoint", "o2_setpoint", "co2_setpoint"
         ]
 

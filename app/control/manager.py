@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, List
 
 # Hardware Abstraction Layer Imports
 from ..hal.dht_sensor import DHT22Sensor
-from ..hal.max31865_sensor import MAX31865 # Added for MAX31865
+from ..hal.max31865_sensor import MAX31865_Hub # Changed to MAX31865_Hub
 from ..hal.o2_sensor import DFRobot_Oxygen_IIC
 from ..hal.relay_output import RelayOutput
 # from ..hal.co2_sensor import CO2Sensor # Import the new dummy sensor # TEMP DISABLED
@@ -90,27 +90,32 @@ class ControlManager:
         self.dht_sensor = DHT22Sensor(DHT_PIN)
         self.dht_sensor.start_background_initialization()
 
-        # Initialize MAX31865 Sensor
-        print("  Initializing MAX31865 sensor...")
-        self.max31865_sensor = None # Default to None
+        # Initialize MAX31865 Sensor Hub
+        print("  Initializing MAX31865 sensor hub...")
+        self.max31865_sensor_hub = None # Default to None
         try:
-            # Initialize HAL using parameters from the working example
-            # CS Pin = D5 (GPIO5)
+            # Initialize HAL Hub using parameters from the working example
+            # CS Pins for Hub: board.CE0 (GPIO8) and board.CE1 (GPIO7)
             # Wires = 2
             # RTD Nominal = 100.0
             # Ref Resistor = 430.0
-            self.max31865_sensor = MAX31865(
-                cs_pin=board.D5,
+            self.max31865_sensor_hub = MAX31865_Hub(
+                cs_pin_1=board.CE0, # Standard SPI0 CE0
+                cs_pin_2=board.CE1, # Standard SPI0 CE1
                 wires=2,
                 rtd_nominal_resistance=100.0,
                 ref_resistance=430.0
             )
             # The HAL class will log its own success/failure.
-            print("  Attempted MAX31865 sensor HAL initialization (using GPIO5).")
-        except Exception as e: # Catch exceptions from our HAL's __init__
-            self._logger.warning(f"Failed to initialize MAX31865 HAL: {e}. Temperature control will be degraded.")
-            print(f"  Warning: Failed to initialize MAX31865 HAL: {e}. Temperature control will be degraded.")
-            self.max31865_sensor = None # Ensure it's None on failure
+            print("  Attempted MAX31865_Hub HAL initialization (using board.CE0 and board.CE1).")
+        except AttributeError as e:
+            self._logger.error(f"Failed to initialize MAX31865_Hub: board.CE0 or board.CE1 not available. {e}. Temperature control will be disabled.")
+            print(f"  Error: Failed to initialize MAX31865_Hub: board.CE0 or board.CE1 not available. {e}. Temperature control will be disabled.")
+            self.max31865_sensor_hub = None # Ensure it's None on failure
+        except Exception as e: # Catch other exceptions from HAL's __init__
+            self._logger.warning(f"Failed to initialize MAX31865_Hub HAL: {e}. Temperature control will be degraded.")
+            print(f"  Warning: Failed to initialize MAX31865_Hub HAL: {e}. Temperature control will be degraded.")
+            self.max31865_sensor_hub = None # Ensure it's None on failure
 
         # self.o2_sensor = DFRobot_Oxygen_IIC(bus=1, addr=O2_SENSOR_ADDR) # O2Loop will instantiate its own sensor
         # Use the CO2_SENSOR_PORT constant defined above
@@ -125,7 +130,7 @@ class ControlManager:
         print("  Initializing Control Loops...")
         self.temp_loop = TemperatureLoop(
             manager=self, # Pass manager instance
-            temp_sensor=self.max31865_sensor,
+            temp_sensor=self.max31865_sensor_hub, # Pass the sensor hub
             heater_relay=self.heater_relay,
             setpoint=DEFAULT_TEMP_SETPOINT,
             p=TEMP_PID_P, i=TEMP_PID_I, d=TEMP_PID_D,
@@ -559,7 +564,10 @@ class ControlManager:
                 "co2_enabled": self.co2_enabled,
                 "air_pump_enabled": self.air_pump_enabled, # NEW: Report air pump enabled state
                 # ---------------------------------
-                "temperature": temp_status.get("temperature"),
+                # Updated temperature reporting for MAX31865_Hub
+                "temperature_sensor1": temp_status.get("temperature_sensor1"),
+                "temperature_sensor2": temp_status.get("temperature_sensor2"),
+                "temperature": temp_status.get("temperature_average_control"), # For logging and general display
                 "temp_setpoint": temp_status.get("setpoint"),
                 "heater_on": temp_status.get("heater_on"), # This should reflect both flags via loop's property
                 "humidity": hum_status.get("humidity"),

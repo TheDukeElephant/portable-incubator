@@ -82,6 +82,21 @@ h1 {
     margin-bottom: 5px;
 }
 
+/* Style for the individual temperature sensor readings */
+.status-item > div[id^="temp-current-"] {
+    margin-bottom: 5px; /* Add some space below each sensor reading */
+}
+
+/* Adjust styling for the span containing the value if it's inside the new divs */
+.status-item > div > span.value {
+    font-size: 1.5em; /* Slightly smaller if needed, or adjust as per design */
+    /* display: inline; */ /* If you want "Sensor X:" and value on the same line naturally */
+}
+.status-item > div > span.unit {
+    font-size: 0.8em;
+    /* display: inline; */
+}
+
 .unit {
     font-size: 0.9em;
     color: var(--text-muted-color);

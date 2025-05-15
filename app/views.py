@@ -242,6 +242,62 @@ def download_log():
     output.headers["Content-type"] = "text/csv"
     return output
 
+# ------------- API endpoint for Historical Data (JSON) ------------------
+@main_bp.route("/api/history")
+def api_history():
+    """Serves historical data as JSON, including all sensor readings."""
+    global _async_loop # Ensure _async_loop is accessible
+    if not _async_loop or not _async_loop.is_running():
+         return jsonify({"ok": False, "error": "Background processing loop not running."}), 500
+
+    duration_str = request.args.get('duration', 'all') # Default to 'all'
+    duration_info = DURATION_MAP.get(duration_str)
+
+    start_time = None
+    # end_time = time.time() # Not strictly needed if logger handles 'None' as 'now' for end_time
+
+    if duration_info:
+        _, duration_seconds = duration_info
+        if duration_seconds is not None:
+            current_timestamp = time.time()
+            start_time = current_timestamp - duration_seconds
+    elif duration_str != 'all':
+        # Invalid duration string if not 'all' and not in DURATION_MAP
+        print(f"Warning: Invalid duration '{duration_str}' received for /api/history. Valid options: {list(DURATION_MAP.keys())}")
+        return jsonify({"ok": False, "error": f"Invalid duration parameter: {duration_str}. Valid options: {list(DURATION_MAP.keys())}"}), 400
+
+    print(f"Requesting historical JSON data for duration: {duration_str} (Start epoch: {start_time})")
+
+    # Assume manager.logger has a method get_log_records(start_time=None, end_time=None)
+    # which returns a list of dictionaries, each representing a log entry.
+    # These dictionaries are expected to include temperature_sensor1 and temperature_sensor2.
+    if not hasattr(manager.logger, 'get_log_records'):
+        print(f"Error: manager.logger does not have method 'get_log_records'. This method needs to be implemented in DataLogger.")
+        return jsonify({"ok": False, "error": "Server configuration error: Logger cannot provide structured historical data."}), 500
+
+    future = asyncio.run_coroutine_threadsafe(
+        manager.logger.get_log_records(start_time=start_time, end_time=None), # Assuming end_time=None means 'up to latest'
+        _async_loop
+    )
+    try:
+        records = future.result(timeout=15) # Increased timeout slightly for potentially larger data
+        if records is None: # Handle case where logger might return None for no data or error
+            records = []
+        return jsonify({
+            "ok": True,
+            "data": records,
+            "duration_requested": duration_str,
+            "start_timestamp_approx_utc": start_time
+        })
+    except asyncio.TimeoutError:
+        print(f"Timeout retrieving historical data for API /api/history.")
+        return jsonify({"ok": False, "error": "Timeout retrieving historical data."}), 503 # Service Unavailable
+    except Exception as e:
+        print(f"Error retrieving historical data for API /api/history: {e}")
+        # It's good practice to log the full exception traceback here for debugging
+        # import traceback
+        # traceback.print_exc()
+        return jsonify({"ok": False, "error": f"Failed to retrieve historical data: {str(e)}"}), 500
 # ------------- WebSocket stream ------------------
 @sock.route("/stream")
 def stream(ws):

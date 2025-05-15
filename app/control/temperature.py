@@ -3,7 +3,7 @@ import asyncio
 import time
 from simple_pid import PID
 # from ..hal.dht_sensor import DHT22Sensor # Replaced by MAX31865
-from ..hal.max31865_sensor import MAX31865 # Import new sensor
+from ..hal.max31865_sensor import MAX31865_Hub # Import MAX31865_Hub
 from ..hal.relay_output import RelayOutput
 from .base_loop import BaseLoop # Import BaseLoop
 # Forward declaration for type hinting
@@ -18,7 +18,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
     """
     def __init__(self,
                  manager: 'ControlManager', # Add manager argument
-                 temp_sensor: Optional[MAX31865], # Changed to MAX31865, can be None
+                 temp_sensor: Optional[MAX31865_Hub], # Changed to MAX31865_Hub, can be None
                  heater_relay: RelayOutput,
                  enabled_attr: str, # Accept the enabled attribute name
                  p: float = 5.0,
@@ -33,7 +33,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
         Args:
             manager: The ControlManager instance.
-            temp_sensor: Instance of MAX31865 sensor, or None if not available.
+            temp_sensor: Instance of MAX31865_Hub, or None if not available.
             heater_relay: Instance of RelayOutput for the heater.
             enabled_attr: The attribute name in the manager for the enabled state.
             p: Proportional gain for PID.
@@ -55,7 +55,7 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         # For simple on/off, limits aren't strictly necessary but can be good practice.
         self.pid = PID(p, i, d, setpoint=setpoint, sample_time=sample_time, output_limits=(-100, 100))
 
-        self._current_temperature: float | None = None
+        self._current_temperature: dict[str, float | None] | None = None # Store as dict {"sensor1": temp, "sensor2": temp}
         self._heater_on: bool = False
         # self._last_update_time: float = 0 # Handled by BaseLoop timing
         # self._active = True # Replaced by BaseLoop._is_running and _stop_event
@@ -63,32 +63,34 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         # Attempt initial sensor read
         if self.temp_sensor is None:
             print("Warning: TemperatureLoop initialized without a temperature sensor. Temperature control will be disabled.")
-            self._logger.warning("TemperatureLoop initialized without a temperature sensor. Heater will be kept off.") # Use logger
+            self._logger.warning("TemperatureLoop initialized without a temperature sensor hub. Heater will be kept off.") # Use logger
             self._current_temperature = None # Ensure it's None if no sensor
         else:
             self._read_sensor() # Read only if sensor exists
-        print(f"TemperatureLoop initialized. Initial Temp: {self._current_temperature}°C, Setpoint: {self.pid.setpoint}°C")
+        print(f"TemperatureLoop initialized. Initial Temps: {self._current_temperature}, Setpoint: {self.pid.setpoint}°C")
 
     def _read_sensor(self):
-        """Reads the MAX31865 sensor and updates the internal temperature state."""
+        """Reads the MAX31865_Hub and updates the internal temperature state."""
         if self.temp_sensor is None:
             self._current_temperature = None
             # Optional: Log this periodically if needed, but initial warning in __init__ might be enough
-            # print("Warning: Attempted to read temperature, but no sensor is available.")
+            # print("Warning: Attempted to read temperature, but no sensor hub is available.")
             return # Exit early if no sensor
 
-        # import random # No longer needed
-        # temp, _ = self.temp_sensor.read() # Old DHT22 call
-        temp = self.temp_sensor.read_temperature() # New MAX31865 call
+        temps = self.temp_sensor.read_all_temperatures() # Returns {"sensor1": float|None, "sensor2": float|None}
 
-        if temp is not None:
-            self._current_temperature = temp
-            # print(f"DEBUG: Temperature read: {self._current_temperature}°C") # Optional debug
+        if temps["sensor1"] is None and temps["sensor2"] is None:
+            self._logger.warning("Failed to read temperature from both MAX31865 sensors.")
+            self._current_temperature = None # Indicate a complete failure
+        elif temps["sensor1"] is None:
+            self._logger.warning("Failed to read temperature from MAX31865 sensor 1.")
+            self._current_temperature = {"sensor1": None, "sensor2": temps["sensor2"]}
+        elif temps["sensor2"] is None:
+            self._logger.warning("Failed to read temperature from MAX31865 sensor 2.")
+            self._current_temperature = {"sensor1": temps["sensor1"], "sensor2": None}
         else:
-            # Setting to None is important for safety logic in control_step
-            self._current_temperature = None
-            print("Warning: Failed to read temperature from MAX31865 sensor.") # Sensor exists but read failed
-            # No longer keeping last known value, None indicates an issue.
+            self._current_temperature = temps
+            # print(f"DEBUG: Temperatures read: {self._current_temperature}") # Optional debug
 
     # def _update_control(self): # <-- REMOVE this method, logic moved to control_step
     #     """Calculates PID output and updates the heater relay state."""
@@ -119,14 +121,28 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         print(f"DEBUG: Temperature control_step. is_active={self._active()}") # <-- Use print and call _active()
         self._read_sensor()
 
-        # 1. Check Sensor Status
-        if self._current_temperature is None:
-            print("Safety: Turning heater OFF due to unknown temperature.")
+        # 1. Check Sensor Status and determine control temperature
+        control_temp = None
+        if self._current_temperature is None: # Both sensors failed or hub not present
+            print("Safety: Turning heater OFF due to no valid temperature readings from hub.")
             self._ensure_actuator_off() # Ensure heater is off and PID reset
+            return
+        elif self._current_temperature["sensor1"] is not None and self._current_temperature["sensor2"] is not None:
+            control_temp = (self._current_temperature["sensor1"] + self._current_temperature["sensor2"]) / 2
+            print(f"DEBUG: Using average temp for control: {control_temp:.2f}°C (S1: {self._current_temperature['sensor1']:.2f}, S2: {self._current_temperature['sensor2']:.2f})")
+        elif self._current_temperature["sensor1"] is not None:
+            control_temp = self._current_temperature["sensor1"]
+            print(f"DEBUG: Using Sensor 1 temp for control: {control_temp:.2f}°C (Sensor 2 failed)")
+        elif self._current_temperature["sensor2"] is not None:
+            control_temp = self._current_temperature["sensor2"]
+            print(f"DEBUG: Using Sensor 2 temp for control: {control_temp:.2f}°C (Sensor 1 failed)")
+        else: # Should be caught by the first 'is None' check, but as a safeguard
+            print("Safety: Turning heater OFF due to no valid temperature readings (internal logic error).")
+            self._ensure_actuator_off()
             return
 
         # 2. Calculate PID Output (only if sensor is OK)
-        pid_output = self.pid(self._current_temperature)
+        pid_output = self.pid(control_temp)
 
         # 3. Determine desired heater state
         should_be_on = pid_output > self._output_threshold
@@ -135,11 +151,11 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
         if should_be_on and not self._heater_on:
             self.heater_relay.on()
             self._heater_on = True
-            print(f"Heater ON (Temp: {self._current_temperature:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
+            print(f"Heater ON (Control Temp: {control_temp:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
         elif not should_be_on and self._heater_on:
             self.heater_relay.off()
             self._heater_on = False
-            print(f"Heater OFF (Temp: {self._current_temperature:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
+            print(f"Heater OFF (Control Temp: {control_temp:.2f}°C, Setpoint: {self.pid.setpoint:.2f}°C, PID: {pid_output:.2f})")
         # else: No change needed
 
     # Remove the custom run() method, BaseLoop provides it.
@@ -174,8 +190,8 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
     # Keep current_temperature property
     @property
-    def current_temperature(self) -> float | None:
-        """Returns the last read temperature."""
+    def current_temperature(self) -> dict[str, float | None] | None:
+        """Returns the last read temperatures as a dictionary {'sensor1': temp1, 'sensor2': temp2} or None."""
         return self._current_temperature
 
     # Keep heater_is_on property
@@ -187,11 +203,32 @@ class TemperatureLoop(BaseLoop): # Inherit from BaseLoop
 
     def get_status(self) -> dict:
         """Returns the current status of the temperature loop."""
-        current_temp_display = "NC" if self.current_temperature is None else self.current_temperature
+        temp_s1_display = "NC"
+        temp_s2_display = "NC"
+        avg_temp_display = "NC"
+
+        if self.current_temperature is not None:
+            if self.current_temperature.get("sensor1") is not None:
+                temp_s1_display = f"{self.current_temperature['sensor1']:.2f}"
+            if self.current_temperature.get("sensor2") is not None:
+                temp_s2_display = f"{self.current_temperature['sensor2']:.2f}"
+
+            s1_val = self.current_temperature.get("sensor1")
+            s2_val = self.current_temperature.get("sensor2")
+
+            if s1_val is not None and s2_val is not None:
+                avg_temp_display = f"{(s1_val + s2_val) / 2:.2f}"
+            elif s1_val is not None:
+                avg_temp_display = f"{s1_val:.2f} (S1 only)"
+            elif s2_val is not None:
+                avg_temp_display = f"{s2_val:.2f} (S2 only)"
+
         return {
-            "temperature": current_temp_display,
+            "temperature_sensor1": temp_s1_display,
+            "temperature_sensor2": temp_s2_display,
+            "temperature_average_control": avg_temp_display, # Reflects what PID might use
             "setpoint": self.setpoint,
-            "heater_on": self.heater_is_on, # Use property which checks incubator_running
+            "heater_on": self.heater_is_on,
             "pid_p": self.pid.Kp,
             "pid_i": self.pid.Ki,
             "pid_d": self.pid.Kd,
