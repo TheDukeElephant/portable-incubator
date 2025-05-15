@@ -116,14 +116,14 @@ function initCharts() {
             labels: [], // Initialize with empty labels, will be populated by the first sensor's data
             datasets: [
                 {
-                    label: 'Sensor 1',
+                    label: 'Liquid',
                     data: chartData.temperature_sensor1.values,
                     borderColor: '#FFA500', // Orange
                     tension: 0.1,
                     pointRadius: 0
                 },
                 {
-                    label: 'Sensor 2',
+                    label: 'Chamber',
                     data: chartData.temperature_sensor2.values,
                     borderColor: '#FF6384', // Pink
                     tension: 0.1,
