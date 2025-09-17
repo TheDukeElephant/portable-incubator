@@ -75,8 +75,8 @@ The system follows a layered architecture:
 | Component                     | Interface | BCM GPIO Pin(s)     | Notes                                     |
 | :---------------------------- | :-------- | :------------------ | :---------------------------------------- |
 | **Sensors**                   |           |                     |                                           |
-| O2 Sensor                     | I2C       | 2 (SDA), 3 (SCL)    | Standard I2C pins                         |
-| CO2 Sensor (e.g., SprintIR)   | UART      | 14 (TXD), 15 (RXD)  | Serial Port (e.g., `/dev/ttyS0`)          |
+| O2 Sensor                     | I2C       | 2 (SDA), 3 (SCL)    | Standard I2C pins; default addr 0x73 on bus 1 |
+| CO2 Sensor (e.g., SprintIR)   | UART      | 14 (TXD), 15 (RXD)  | Default `/dev/ttyS0`; enable serial, disable login shell |
 | DHT22 Sensor (Temp/Humidity)  | Digital   | 4                   |                                           |
 | PT100 Temp Sensors (2x MAX31865) | SPI       | SCLK: GPIO11, MOSI: GPIO10, MISO: GPIO9, CS0: GPIO8, CS1: GPIO7 | SPI0, Chip Selects on GPIO8 (CE0) & GPIO7 (CE1) |
 | **Actuators (Relays)**        |           |                     |                                           |
@@ -86,6 +86,17 @@ The system follows a layered architecture:
 | Primary CO2 Solenoid Relay    | Digital   | **24**              | Main CO2 injection valve                  |
 | Secondary CO2 Solenoid Relay  | Digital   | 12                  | Fine-tune/redundant CO2 injection         |
 | Argon Valve Relay             | Digital   | 23                  | Controls Argon release for O2 displacement|
+
+#### DHT22 (Humidity/Temp) Wiring and Troubleshooting
+
+- Data GPIO in code is BCM 4. On the Raspberry Pi 40-pin header, BCM 4 corresponds to Physical Pin 7.
+- Do NOT confuse this with Physical Pin 4, which is a 5V power pin. Connecting the DHT22 data to Physical Pin 4 will not work and may damage hardware.
+- Typical wiring for DHT22:
+    - VCC → 3.3V (Physical Pin 1 or 17)
+    - GND → GND (e.g., Physical Pin 6)
+    - DATA → BCM 4 (Physical Pin 7)
+    - Pull-up: Many DHT22 boards include a 10k pull-up between DATA and 3.3V. If yours is a bare sensor, add a 10k resistor between DATA and 3.3V.
+- 1-Wire conflict: If the Raspberry Pi 1-Wire interface is enabled, it uses BCM 4 by default and can break DHT22 reads. Disable 1-Wire in raspi-config (Interface Options → 1-Wire → No) or move the DHT22 to another free GPIO (e.g., BCM 17 Physical Pin 11) and update `DHT_PIN` in `app/control/manager.py` accordingly.
 
 ### PT100 Temperature Sensors (Dual MAX31865 Setup)
 
@@ -108,13 +119,13 @@ For connecting two MAX31865 PT100 temperature sensors:
 
 **Note on PT100 Connection:** The PT100 sensor connects to the MAX31865 board. Depending on your specific MAX31865 board and PT100 sensor, you can use 2-wire, 3-wire, or 4-wire configurations. Always consult the datasheet for your MAX31865 board for correct wiring.
 
-#### Raspberry Pi Configuration:
+#### Raspberry Pi Interface Configuration
 
-The SPI interface on the Raspberry Pi must be enabled for the MAX31865 to function. This can typically be done using the `sudo raspi-config` utility:
-1.  Navigate to `Interface Options`.
-2.  Select `SPI`.
-3.  Choose `&lt;Yes&gt;` to enable the SPI interface.
-4.  Reboot if prompted.
+Enable the interfaces used by the hardware via `sudo raspi-config`:
+1. Interface Options → SPI → Yes (for MAX31865 over SPI0: CE0=GPIO8, CE1=GPIO7; SCLK=GPIO11, MOSI=GPIO10, MISO=GPIO9)
+2. Interface Options → I2C → Yes (for O2 sensor on SDA=GPIO2, SCL=GPIO3; default address 0x73 on bus 1)
+3. Interface Options → Serial → Disable login shell over serial, then enable serial port hardware (for CO2 on TXD=GPIO14, RXD=GPIO15 using `/dev/ttyS0`)
+4. Reboot if prompted.
 
 #### Software Dependency:
 
@@ -157,7 +168,7 @@ The `adafruit-circuitpython-max31865` library is required. This is listed in `re
     *   Install dependencies: `pip install -r requirements.txt`
 
 3.  **Configuration:**
-    *   Review and modify hardware configurations in `app/control/manager.py`. This includes GPIO pin assignments, the serial port for the CO2 sensor (e.g., `CO2_SENSOR_PORT = '/dev/ttyS0'`), the I2C address for the O2 sensor, and the CS pin for the MAX31865 (GPIO 5).
+    *   Review and modify hardware configurations in `app/control/manager.py`. This includes GPIO pin assignments, the serial port for the CO2 sensor (default `CO2_SENSOR_PORT = '/dev/ttyS0'`), and the I2C address for the O2 sensor (default `0x73` on bus 1). For temperature, the project uses two MAX31865 boards over SPI0 with CS pins CE0 (GPIO8) and CE1 (GPIO7).
     *   Adjust control loop parameters (setpoints, PID constants, cycle timings, control intervals) in `app/control/manager.py` or the respective files within the `app/control/` directory as needed.
 
 4.  **Running the Application:**
