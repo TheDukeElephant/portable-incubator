@@ -24,7 +24,7 @@ class CO2Loop(BaseLoop):
     """
     def __init__(self,
                  manager: 'ControlManager', # Add manager argument
-                 co2_sensor_port: str = "/dev/ttyS0", # Accept sensor port path
+                 co2_sensor_port: str = "auto", # Accept sensor port path or 'auto'
                  vent_relay_pin: int = 0,
                  enabled_attr: str = "", # Accept the enabled attribute name
                  setpoint: float = DEFAULT_CO2_SETPOINT_PPM):
@@ -39,9 +39,16 @@ class CO2Loop(BaseLoop):
             setpoint: Initial target maximum CO2 level in ppm.
         """
         super().__init__(manager=manager, control_interval=CONTROL_INTERVAL_SECONDS, enabled_attr=enabled_attr) # Pass manager and enabled_attr
-        # Instantiate the sensor here using the provided port
-        # Use the unfiltered 'z' command to read above 20k ppm
-        self.sensor = CO2Sensor(url=co2_sensor_port, use_unfiltered_cmd=True)
+        # Resolve port: explicit string or 'auto'
+        self._port = co2_sensor_port
+        if self._port == 'auto':
+            print("CO2Loop: Auto-detecting CO2 sensor serial port...")
+            # Defer instantiation until start() to allow async probing
+            self.sensor = None
+        else:
+            # Instantiate the sensor here using the provided port
+            # Use the unfiltered 'z' command to read above 20k ppm
+            self.sensor = CO2Sensor(url=self._port, use_unfiltered_cmd=True)
         self._setpoint = setpoint
         self.vent_relay_pin = vent_relay_pin
         self.current_co2 = None # Initialize as None
@@ -233,6 +240,35 @@ class CO2Loop(BaseLoop):
 
     async def start(self):
         """Starts the loop and opens the CO2 sensor connection."""
+        # If auto, probe common ports
+        if self.sensor is None and self._port == 'auto':
+            candidates = [
+                '/dev/serial0', '/dev/ttyAMA0', '/dev/ttyS0'
+            ]
+            # Try USB serial devices too (limit to a few to avoid long scans)
+            # We'll attempt ttyUSB0..ttyUSB3
+            candidates.extend([f'/dev/ttyUSB{i}' for i in range(0, 4)])
+            chosen = None
+            for dev in candidates:
+                try:
+                    test = CO2Sensor(url=dev, use_unfiltered_cmd=True)
+                    await test.__aenter__()
+                    try:
+                        _ = await test.read_ppm()
+                        chosen = dev
+                        await test.__aexit__()
+                        break
+                    except Exception:
+                        await test.__aexit__()
+                        continue
+                except Exception:
+                    continue
+            if chosen:
+                print(f"CO2Loop: Detected CO2 sensor on {chosen}")
+                self.sensor = CO2Sensor(url=chosen, use_unfiltered_cmd=True)
+            else:
+                print("Error: Could not auto-detect CO2 sensor port. Set CO2_SENSOR_PORT env var (e.g., /dev/serial0 or /dev/ttyUSB0).")
+                return
         try:
             await self.sensor.__aenter__()
             await asyncio.sleep(0.5)

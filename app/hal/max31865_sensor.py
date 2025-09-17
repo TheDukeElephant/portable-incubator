@@ -88,10 +88,11 @@ class MAX31865:
             # self._handle_fault() # Can be noisy if called every time
             pass
 
-        # Check if the reading itself indicates a fault (like -242)
+        # Check if the reading itself indicates a fault (like -242). Treat as invalid.
         if temperature is not None and temperature < -240:
             logger.warning("Temperature reading (%s°C) indicates a potential fault.", temperature)
-            self._handle_fault() # Check for specific faults if reading is bad
+            self._handle_fault()  # Check for specific faults if reading is bad
+            return None
 
         return temperature
 

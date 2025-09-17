@@ -34,17 +34,49 @@ HUMIDIFIER_PIN = 27
 ARGON_VALVE_PIN = 23
 CO2_VENT_PIN = 24
 
+def _resolve_board_pin(name: str):
+    """Resolve a board pin by name from env-friendly strings.
+
+    Accepts examples like: 'CE0', 'CE1', 'D5', 'D6', 'GPIO5', 'GPIO6'.
+    Returns the corresponding board pin object or raises ValueError.
+    """
+    if not name:
+        raise ValueError("Empty pin name")
+    key = name.strip()
+    # Normalize common forms
+    if key.upper().startswith("GPIO"):
+        # Convert GPIO5 -> D5
+        num = key[4:]
+        key = f"D{num}"
+    # Try exact attribute on board (CE0, CE1, D5, etc.)
+    attr = key
+    # Ensure CE0/CE1 uppercased
+    if key.upper() in ("CE0", "CE1"):
+        attr = key.upper()
+    try:
+        return getattr(board, attr)
+    except AttributeError as e:
+        raise ValueError(f"Unknown board pin '{name}'. Try CE0/CE1 or D<number> or GPIO<number>.") from e
+
 # MAX31865 Chip Select Pins (Board numbering via Blinka)
 # Defaults use SPI0: CE0 (GPIO8, physical 24) and CE1 (GPIO7, physical 26)
-# You can change these to any free GPIOs (e.g., board.D5, board.D6) if CE1 has conflicts.
-MAX31865_CS_PIN_1 = board.CE0
-MAX31865_CS_PIN_2 = board.CE1
+# You can change these via environment variables MAX31865_CS1 and MAX31865_CS2,
+# or to any free GPIOs (e.g., D5, D6) if CE1 has conflicts.
+_cs1_env = os.getenv("MAX31865_CS1", "CE0")
+_cs2_env = os.getenv("MAX31865_CS2", "CE1")
+try:
+    MAX31865_CS_PIN_1 = _resolve_board_pin(_cs1_env)
+    MAX31865_CS_PIN_2 = _resolve_board_pin(_cs2_env)
+except ValueError as _pin_err:
+    # Fallback to CE0/CE1 if env vars invalid
+    logging.getLogger(__name__).warning(f"Invalid MAX31865 CS env var: {_pin_err}. Falling back to CE0/CE1.")
+    MAX31865_CS_PIN_1 = board.CE0
+    MAX31865_CS_PIN_2 = board.CE1
 
 # Serial Port Configuration
-# IMPORTANT: Verify this is the correct serial port for your CO2 sensor!
-# Common options: '/dev/ttyS0' (RPi default serial), '/dev/ttyAMA0' (older RPi), '/dev/ttyUSB0' (USB adapter)
-# Reverting to /dev/ttyUSB0 based on original HAL init and lack of other clear candidates
-CO2_SENSOR_PORT = '/dev/ttyS0'
+# Set to 'auto' to scan common ports and pick the first working one.
+# Common options scanned: /dev/ttyUSB*, /dev/serial0, /dev/ttyAMA0, /dev/ttyS0
+CO2_SENSOR_PORT = os.getenv('CO2_SENSOR_PORT', 'auto')
 
 # I2C Configuration
 O2_SENSOR_ADDR = 0x73
