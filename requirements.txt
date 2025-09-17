@@ -1,12 +1,14 @@
 Flask==3.0.2
 flask-sock==0.7.0
+simple-websocket>=0.10.1   # required by flask-sock
 
 aiosqlite==0.20.0
 
 simple-pid==2.0.0
-gpiozero==2.0          # replaces RPi.GPIO
+gpiozero==2.0
+RPi.GPIO>=0.7.1        # gpiozero default pin factory on Raspberry Pi
 adafruit-circuitpython-dht
 adafruit-blinka
 adafruit-circuitpython-max31865
-pyserial_asyncio
+pyserial-asyncio           # import name: serial_asyncio
 smbus2                   # For I2C communication (O2 Sensor, potentially others)
