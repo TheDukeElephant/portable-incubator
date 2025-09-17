@@ -225,10 +225,22 @@ def download_log():
     # --- End Time Range Handling ---
 
     # Need to run the async get_data_as_csv in the background loop thread
-    # Pass start_time and end_time (end_time is currently always now, so passing None might be okay if logger handles it)
-    future = asyncio.run_coroutine_threadsafe(manager.logger.get_data_as_csv(start_time=start_time, end_time=None), _async_loop)
+    # Pass both start_time and end_time (end_time is now) to bound the query
+    future = asyncio.run_coroutine_threadsafe(
+        manager.logger.get_data_as_csv(start_time=start_time, end_time=end_time),
+        _async_loop
+    )
     try:
-        csv_data = future.result(timeout=10) # Wait for the result
+        # Increase timeout for longer durations
+        timeout_sec = 10
+        if duration_str in ("24h", "2d", "5d", "7d", "10d", "20d", "30d", "60d", "all"):
+            timeout_sec = 60
+        elif duration_str in ("6h",):
+            timeout_sec = 20
+        csv_data = future.result(timeout=timeout_sec) # Wait for the result
+    except asyncio.TimeoutError as e:
+        print(f"Timeout retrieving CSV data after {timeout_sec}s for duration '{duration_str}'.")
+        return f"Error retrieving log data: timed out after {timeout_sec}s", 504
     except Exception as e:
         print(f"Error retrieving CSV data: {e}")
         return f"Error retrieving log data: {e}", 500

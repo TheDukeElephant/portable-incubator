@@ -90,8 +90,8 @@ class MAX31865:
 
         # Check if the reading itself indicates a fault (like -242)
         if temperature is not None and temperature < -240:
-             logger.warning(f"Temperature reading ({temperature}°C) indicates a potential fault.")
-             self._handle_fault() # Check for specific faults if reading is bad
+            logger.warning("Temperature reading (%s°C) indicates a potential fault.", temperature)
+            self._handle_fault() # Check for specific faults if reading is bad
 
         return temperature
 
@@ -135,9 +135,9 @@ class MAX31865:
                 logger.warning(f"Unexpected fault status type received: {type(fault_tuple)}, value: {fault_tuple}")
 
         except AttributeError:
-             logger.error("Could not read fault status: 'sensor.fault' attribute does not exist.")
+            logger.error("Could not read fault status: 'sensor.fault' attribute does not exist.")
         except Exception as e:
-             logger.error(f"Error reading fault status: {e}")
+            logger.error("Error reading fault status: %s", e)
 
 class MAX31865_Hub:
     """
@@ -172,11 +172,21 @@ class MAX31865_Hub:
             logger.error(f"Failed to initialize MAX31865 Sensor 1 on CS pin {cs_pin_1}.")
         else:
             logger.info(f"MAX31865 Sensor 1 initialized on CS pin {cs_pin_1}.")
+            try:
+                t1 = self.sensor1.read_temperature()
+                logger.info(f"MAX31865 Sensor 1 first read: {t1}")
+            except Exception as e:
+                logger.error(f"MAX31865 Sensor 1 first read error: {e}")
 
         if not self.sensor2.sensor:
             logger.error(f"Failed to initialize MAX31865 Sensor 2 on CS pin {cs_pin_2}.")
         else:
             logger.info(f"MAX31865 Sensor 2 initialized on CS pin {cs_pin_2}.")
+            try:
+                t2 = self.sensor2.read_temperature()
+                logger.info(f"MAX31865 Sensor 2 first read: {t2}")
+            except Exception as e:
+                logger.error(f"MAX31865 Sensor 2 first read error: {e}")
 
     def read_temperature_sensor1(self):
         """Reads temperature from sensor 1."""

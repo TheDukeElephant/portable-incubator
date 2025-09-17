@@ -127,6 +127,30 @@ Enable the interfaces used by the hardware via `sudo raspi-config`:
 3. Interface Options → Serial → Disable login shell over serial, then enable serial port hardware (for CO2 on TXD=GPIO14, RXD=GPIO15 using `/dev/ttyS0`)
 4. Reboot if prompted.
 
+#### MAX31865 Wiring and Troubleshooting (Dual Boards)
+
+- SPI lines are shared between both boards:
+    - SCLK → BCM 11 (Physical Pin 23)
+    - MOSI → BCM 10 (Physical Pin 19)
+    - MISO → BCM 9 (Physical Pin 21)
+- Each board needs a unique Chip Select (CS):
+    - Default setup uses SPI0:
+        - Sensor 1 CS → CE0 = BCM 8 (Physical Pin 24)
+        - Sensor 2 CS → CE1 = BCM 7 (Physical Pin 26)
+- Power and ground per board:
+    - VIN → 3.3V (Physical Pin 1 or 17)
+    - GND → any GND (e.g., Physical Pin 6)
+- In software, CS pins are configurable in `app/control/manager.py`:
+    - `MAX31865_CS_PIN_1 = board.CE0`
+    - `MAX31865_CS_PIN_2 = board.CE1`
+    - If CE1 conflicts or wiring differs, change these to other free pins (e.g., `board.D5`, `board.D6`) and rewire CS lines accordingly.
+- If only one sensor reads:
+    1) Swap the two CS wires at the Pi header. If the “working” sensor changes sides in the app, the problem is the non‑working board or its CS line.
+    2) Temporarily configure both CS pins to the same physical pin (for a quick sanity check, one at a time) to verify each board responds when selected.
+    3) Verify CE1 (GPIO 7, Pin 26) is not used by another SPI device or overlay.
+    4) Ensure SPI is enabled and cabling is short and solid; MAX31865 requires clean signals at 3.3V.
+    5) Confirm the correct RTD wiring (2/3/4‑wire jumpers) and reference resistor value matches software defaults (PT100 typically 430Ω).
+
 #### Software Dependency:
 
 The `adafruit-circuitpython-max31865` library is required. This is listed in `requirements.txt`.

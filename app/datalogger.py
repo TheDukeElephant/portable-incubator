@@ -193,6 +193,43 @@ class DataLogger:
 
         return output.getvalue()
 
+    async def get_log_records(self, start_time: Optional[float] = None, end_time: Optional[float] = None) -> Optional[List[Dict[str, Any]]]:
+        """
+        Returns historical data as a list of dictionaries suitable for JSON responses.
+
+        Keys include: timestamp_iso, timestamp_epoch, temperature, temperature_sensor1,
+        temperature_sensor2, humidity, o2, co2, temp_setpoint, humidity_setpoint, o2_setpoint, co2_setpoint.
+        """
+        rows = await self.get_data(start_time, end_time)
+        if rows is None:
+            return None
+        records: List[Dict[str, Any]] = []
+        for row in rows:
+            try:
+                ts = float(row[0]) if row and row[0] is not None else None
+            except (TypeError, ValueError):
+                ts = None
+            if ts is not None:
+                dt_object = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+                ts_iso = dt_object.isoformat()
+            else:
+                ts_iso = None
+            records.append({
+                "timestamp_iso": ts_iso,
+                "timestamp_epoch": ts,
+                "temperature": row[1],
+                "temperature_sensor1": row[2],
+                "temperature_sensor2": row[3],
+                "humidity": row[4],
+                "o2": row[5],
+                "co2": row[6],
+                "temp_setpoint": row[7],
+                "humidity_setpoint": row[8],
+                "o2_setpoint": row[9],
+                "co2_setpoint": row[10],
+            })
+        return records
+
 
     async def close(self):
         """Closes the database connection."""

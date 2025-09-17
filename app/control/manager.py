@@ -34,6 +34,12 @@ HUMIDIFIER_PIN = 27
 ARGON_VALVE_PIN = 23
 CO2_VENT_PIN = 24
 
+# MAX31865 Chip Select Pins (Board numbering via Blinka)
+# Defaults use SPI0: CE0 (GPIO8, physical 24) and CE1 (GPIO7, physical 26)
+# You can change these to any free GPIOs (e.g., board.D5, board.D6) if CE1 has conflicts.
+MAX31865_CS_PIN_1 = board.CE0
+MAX31865_CS_PIN_2 = board.CE1
+
 # Serial Port Configuration
 # IMPORTANT: Verify this is the correct serial port for your CO2 sensor!
 # Common options: '/dev/ttyS0' (RPi default serial), '/dev/ttyAMA0' (older RPi), '/dev/ttyUSB0' (USB adapter)
@@ -100,14 +106,14 @@ class ControlManager:
             # RTD Nominal = 100.0
             # Ref Resistor = 430.0
             self.max31865_sensor_hub = MAX31865_Hub(
-                cs_pin_1=board.CE0, # Standard SPI0 CE0
-                cs_pin_2=board.CE1, # Standard SPI0 CE1
+                cs_pin_1=MAX31865_CS_PIN_1, # Configurable CS pin 1 (default CE0)
+                cs_pin_2=MAX31865_CS_PIN_2, # Configurable CS pin 2 (default CE1)
                 wires=2,
                 rtd_nominal_resistance=100.0,
                 ref_resistance=430.0
             )
             # The HAL class will log its own success/failure.
-            print("  Attempted MAX31865_Hub HAL initialization (using board.CE0 and board.CE1).")
+            print("  Attempted MAX31865_Hub HAL initialization.")
         except AttributeError as e:
             self._logger.error(f"Failed to initialize MAX31865_Hub: board.CE0 or board.CE1 not available. {e}. Temperature control will be disabled.")
             print(f"  Error: Failed to initialize MAX31865_Hub: board.CE0 or board.CE1 not available. {e}. Temperature control will be disabled.")
